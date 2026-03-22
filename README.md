@@ -8,7 +8,7 @@ This module defines the contracts that all supplier implementations (AbGroup, Ac
 - **`InventoryItem`** — core inventory record (EAN, MFN, price, quantity, supplier).
 - **`Taxonomy`** — product taxonomy record (brand, name, category) extracted from supplier feeds.
 - **`FeedFormat`** — sealed interface discriminating CSV and XML feed formats.
-- **`CsvRowParser`** / **`XmlItem`** / **`XmlWrapper`** — parser contracts for feed data.
+- **`CsvRowParser`** / **`XmlItem`** — parser contracts for feed data.
 - **`SupplierInfo`** — supplier metadata (name, type, origin, shipping policy).
 
 Support utilities (`api.support` package):
