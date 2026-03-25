@@ -2,8 +2,8 @@ package pl.commercelink.inventory.supplier.api;
 
 import java.util.Optional;
 
-import static pl.commercelink.inventory.supplier.api.UnifiedProductIdentifiers.unifyEan;
-import static pl.commercelink.inventory.supplier.api.UnifiedProductIdentifiers.unifyMfn;
+import static pl.commercelink.taxonomy.UnifiedProductIdentifiers.unifyEan;
+import static pl.commercelink.taxonomy.UnifiedProductIdentifiers.unifyMfn;
 
 public record InventoryItem(
         String ean,

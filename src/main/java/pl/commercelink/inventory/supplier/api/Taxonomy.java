@@ -1,6 +1,7 @@
 package pl.commercelink.inventory.supplier.api;
 
 import pl.commercelink.taxonomy.ProductCategory;
+import pl.commercelink.taxonomy.UnifiedProductIdentifiers;
 
 public record Taxonomy(String ean, String mfn, String brand, String name, ProductCategory category, int dataAccuracyScore) {
 
