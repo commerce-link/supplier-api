@@ -3,9 +3,9 @@ package pl.commercelink.inventory.supplier.api;
 import pl.commercelink.taxonomy.ProductCategory;
 import pl.commercelink.taxonomy.UnifiedProductIdentifiers;
 
-public record Taxonomy(String ean, String mfn, String brand, String name, ProductCategory category, int dataAccuracyScore) {
+public record Taxonomy(String ean, String mfn, String brand, String name, ProductCategory category, int dataAccuracyScore, Integer weightInGrams) {
 
-    public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A", ProductCategory.Other, Integer.MAX_VALUE);
+    public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A", ProductCategory.Other, Integer.MAX_VALUE, null);
 
     public Taxonomy {
         ean = UnifiedProductIdentifiers.unifyEan(ean);
