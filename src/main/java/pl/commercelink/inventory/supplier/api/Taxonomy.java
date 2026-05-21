@@ -12,6 +12,11 @@ public record Taxonomy(String ean, String mfn, String brand, String name, Produc
         mfn = UnifiedProductIdentifiers.unifyMfn(mfn);
     }
 
+    public Taxonomy(String ean, String mfn, String brand, String name,
+                    ProductCategory category, int dataAccuracyScore) {
+        this(ean, mfn, brand, name, category, dataAccuracyScore, null);
+    }
+
     public boolean isProcessable() {
         return category != null
                 && ean != null && !ean.isEmpty()
