@@ -15,13 +15,16 @@ public interface XmlItem {
     default boolean isSellable() { return true; }
     default boolean isInStock() { return false; }
     default boolean isInDelivery() { return false; }
+    default Integer getNetWeightInGrams() { return null; }
+    default Integer getGrossWeightInGrams() { return null; }
 
     default ParsedRow toParsedRow(SupplierInfo supplierInfo) {
         var item = new InventoryItem(getEan(), getMfn(), getNetPrice(), getCurrency(),
                 getQty(), 0, supplierInfo.name(),
                 isSellable(), isInStock(), isInDelivery());
         var taxonomy = new Taxonomy(getEan(), getMfn(), getBrand(), getName(),
-                getCategory(), supplierInfo.accuracyScore());
+                getCategory(), supplierInfo.accuracyScore(),
+                getNetWeightInGrams(), getGrossWeightInGrams());
         return new ParsedRow(item, taxonomy);
     }
 }
