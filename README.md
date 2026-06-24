@@ -4,7 +4,8 @@ Shared interfaces and data types for the CommerceLink supplier feed plugin syste
 
 This module defines the contracts that all supplier implementations (AbGroup, Action, Also, etc.) build on:
 
-- **`SupplierDescriptor`** — base interface every supplier implements. Declares `download()`, `feedFormat()`, and `supplierInfo()`.
+- **`SupplierProviderDescriptor`** — provider-api descriptor every supplier implements (extends `ProviderDescriptor<SupplierProvider>`). Declares `create(config)`, `feedFormat()`, `supplierInfo()`, and `configurationFields()`.
+- **`SupplierProvider`** — config-bound runtime produced by `SupplierProviderDescriptor.create(config)`. Declares `download()`.
 - **`InventoryItem`** — core inventory record (EAN, MFN, price, quantity, supplier).
 - **`Taxonomy`** — product taxonomy record (brand, name, category) extracted from supplier feeds.
 - **`FeedFormat`** — sealed interface discriminating CSV and XML feed formats.
@@ -20,11 +21,13 @@ Support utilities (`api.support` package):
 
 ## Usage
 
-Supplier implementations depend on this artifact and implement `SupplierDescriptor`:
+Supplier implementations depend on this artifact and implement `SupplierProviderDescriptor`:
 
 ```java
-public class MySupplierDescriptor implements SupplierDescriptor {
-    public Optional<FeedData> download() { ... }
+public class MySupplierProviderDescriptor implements SupplierProviderDescriptor {
+    public SupplierProvider create(Map<String, String> config) {
+        return () -> { /* download the feed using config */ };
+    }
     public FeedFormat feedFormat() { ... }
     public SupplierInfo supplierInfo() { ... }
 }

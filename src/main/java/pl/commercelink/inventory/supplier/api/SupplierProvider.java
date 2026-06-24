@@ -5,10 +5,10 @@ import pl.commercelink.inventory.supplier.api.support.ResourceDownloadException;
 import java.util.Optional;
 
 /**
- * Config-bound runtime object produced by {@link SupplierDescriptor#create(java.util.Map)}.
+ * Config-bound runtime object produced by {@link SupplierProviderDescriptor#create(java.util.Map)}.
  * Equivalent to ShippingProvider / PaymentProvider in the other provider domains.
  */
-public interface Supplier {
+public interface SupplierProvider {
 
     Optional<FeedData> download() throws ResourceDownloadException;
 }

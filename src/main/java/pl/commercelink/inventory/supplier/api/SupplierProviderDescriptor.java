@@ -8,9 +8,9 @@ import java.util.List;
 /**
  * Supplier SPI. A descriptor is config-independent metadata (supplierInfo, feedFormat,
  * configurationFields) plus a factory method create(config) that returns a config-bound
- * {@link Supplier}. Mirrors ShippingProviderDescriptor / PaymentProviderDescriptor.
+ * {@link SupplierProvider}. Mirrors ShippingProviderDescriptor / PaymentProviderDescriptor.
  */
-public interface SupplierDescriptor extends ProviderDescriptor<Supplier> {
+public interface SupplierProviderDescriptor extends ProviderDescriptor<SupplierProvider> {
 
     /** Config-independent metadata used for catalog listing and shipping/accuracy data. */
     SupplierInfo supplierInfo();
