@@ -8,15 +8,22 @@ public record Taxonomy(String ean, String mfn, String brand, String name,
                        Integer netWeightInGrams, Integer grossWeightInGrams,
                        String categoryKey) {
 
+    public static final String OTHER_CATEGORY_KEY = ProductCategory.Other.name();
+
     public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A",
             ProductCategory.Other, Integer.MAX_VALUE, null, null);
 
     public Taxonomy {
         ean = UnifiedProductIdentifiers.unifyEan(ean);
         mfn = UnifiedProductIdentifiers.unifyMfn(mfn);
-        categoryKey = (categoryKey != null && !categoryKey.isBlank())
-                ? categoryKey
-                : (category != null ? category.name() : "Other");
+        categoryKey = resolveCategoryKey(categoryKey, category);
+    }
+
+    private static String resolveCategoryKey(String categoryKey, ProductCategory category) {
+        if (categoryKey != null && !categoryKey.isBlank()) {
+            return categoryKey;
+        }
+        return category != null ? category.name() : OTHER_CATEGORY_KEY;
     }
 
     public Taxonomy(String ean, String mfn, String brand, String name,
@@ -31,7 +38,7 @@ public record Taxonomy(String ean, String mfn, String brand, String name,
     }
 
     public boolean isProcessable() {
-        return categoryKey != null && !"Other".equals(categoryKey)
+        return categoryKey != null && !OTHER_CATEGORY_KEY.equals(categoryKey)
                 && ean != null && !ean.isEmpty()
                 && mfn != null && !mfn.isEmpty()
                 && brand != null && !brand.isEmpty()
