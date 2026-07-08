@@ -22,8 +22,9 @@ public interface XmlItem {
         var item = new InventoryItem(getEan(), getMfn(), getNetPrice(), getCurrency(),
                 getQty(), 0, supplierInfo.name(),
                 isSellable(), isInStock(), isInDelivery());
+        ProductCategory category = getCategory();
         var taxonomy = new Taxonomy(getEan(), getMfn(), getBrand(), getName(),
-                getCategory(), supplierInfo.accuracyScore(),
+                category == null ? null : category.name(), supplierInfo.accuracyScore(),
                 getNetWeightInGrams(), getGrossWeightInGrams());
         return new ParsedRow(item, taxonomy);
     }
