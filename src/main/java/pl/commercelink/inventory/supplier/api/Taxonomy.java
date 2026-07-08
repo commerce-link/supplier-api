@@ -4,17 +4,28 @@ import pl.commercelink.taxonomy.ProductCategory;
 import pl.commercelink.taxonomy.UnifiedProductIdentifiers;
 
 public record Taxonomy(String ean, String mfn, String brand, String name,
-                       ProductCategory category, int dataAccuracyScore,
+                       String category, int dataAccuracyScore,
                        Integer netWeightInGrams, Integer grossWeightInGrams) {
 
+    public static final String OTHER = "Other";
+
     public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A",
-            ProductCategory.Other, Integer.MAX_VALUE, null, null);
+            OTHER, Integer.MAX_VALUE, null, null);
 
     public Taxonomy {
         ean = UnifiedProductIdentifiers.unifyEan(ean);
         mfn = UnifiedProductIdentifiers.unifyMfn(mfn);
     }
 
+    @Deprecated
+    public Taxonomy(String ean, String mfn, String brand, String name,
+                    ProductCategory category, int dataAccuracyScore,
+                    Integer netWeightInGrams, Integer grossWeightInGrams) {
+        this(ean, mfn, brand, name, category == null ? null : category.name(),
+                dataAccuracyScore, netWeightInGrams, grossWeightInGrams);
+    }
+
+    @Deprecated
     public Taxonomy(String ean, String mfn, String brand, String name,
                     ProductCategory category, int dataAccuracyScore) {
         this(ean, mfn, brand, name, category, dataAccuracyScore, null, null);
@@ -26,6 +37,6 @@ public record Taxonomy(String ean, String mfn, String brand, String name,
                 && mfn != null && !mfn.isEmpty()
                 && brand != null && !brand.isEmpty()
                 && name != null && !name.isEmpty()
-                && category != ProductCategory.Other;
+                && !category.equals(OTHER);
     }
 }
