@@ -1,0 +1,92 @@
+package pl.commercelink.inventory.supplier.api;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class XmlItemTest {
+
+    private static final SupplierInfo SUPPLIER = new SupplierInfo("SupplierX", SupplierType.Distributor, 7, "PL",
+            new ShippingPolicy(new ShippingTerms(1, new ShippingCostPolicy.Free())));
+
+    private XmlItem item(String ean, String mfn) {
+        return new XmlItem() {
+            @Override
+            public String getEan() { return ean; }
+
+            @Override
+            public String getMfn() { return mfn; }
+
+            @Override
+            public String getBrand() { return "BrandX"; }
+
+            @Override
+            public String getName() { return "GeForce RTX"; }
+
+            @Override
+            public String getCategory() { return "GPU"; }
+
+            @Override
+            public double getNetPrice() { return 99.99; }
+
+            @Override
+            public int getQty() { return 3; }
+
+            @Override
+            public String getCurrency() { return "PLN"; }
+        };
+    }
+
+    @Test
+    void toParsedRowCarriesCategoryNameIntoTaxonomy() {
+        // when
+        ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
+
+        // then
+        assertEquals("GPU", row.taxonomy().category().toString());
+        assertTrue(row.taxonomy().isProcessable());
+    }
+
+    @Test
+    void toParsedRowCarriesItemAndTaxonomyFields() {
+        // when
+        ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
+
+        // then
+        assertEquals("5901234123457", row.item().ean());
+        assertEquals("MFN-1", row.item().mfn());
+        assertEquals(99.99, row.item().netPrice());
+        assertEquals("PLN", row.item().currency());
+        assertEquals(3, row.item().qty());
+        assertEquals("SupplierX", row.item().supplier());
+        assertEquals("BrandX", row.taxonomy().brand());
+        assertEquals("GeForce RTX", row.taxonomy().name());
+        assertEquals(7, row.taxonomy().dataAccuracyScore());
+        assertNull(row.taxonomy().netWeightInGrams());
+        assertNull(row.taxonomy().grossWeightInGrams());
+    }
+
+    @Test
+    void toParsedRowUnifiesEanAndMfn() {
+        // when
+        ParsedRow row = item("0590123412345", "mfn 1").toParsedRow(SUPPLIER);
+
+        // then
+        assertEquals("590123412345", row.taxonomy().ean());
+        assertEquals("MFN1", row.taxonomy().mfn());
+    }
+
+    @Test
+    void defaultFlagsAreSellableNotInStockNotInDelivery() {
+        // when
+        XmlItem xmlItem = item("5901234123457", "MFN-1");
+
+        // then
+        assertTrue(xmlItem.isSellable());
+        assertFalse(xmlItem.isInStock());
+        assertFalse(xmlItem.isInDelivery());
+    }
+}

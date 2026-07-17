@@ -1,13 +1,11 @@
 package pl.commercelink.inventory.supplier.api;
 
-import pl.commercelink.taxonomy.ProductCategory;
-
 public interface XmlItem {
     String getEan();
     String getMfn();
     String getBrand();
     String getName();
-    ProductCategory getCategory();
+    String getCategory();
     double getNetPrice();
     int getQty();
     String getCurrency();
@@ -22,9 +20,8 @@ public interface XmlItem {
         var item = new InventoryItem(getEan(), getMfn(), getNetPrice(), getCurrency(),
                 getQty(), 0, supplierInfo.name(),
                 isSellable(), isInStock(), isInDelivery());
-        ProductCategory category = getCategory();
         var taxonomy = new Taxonomy(getEan(), getMfn(), getBrand(), getName(),
-                category == null ? null : category.name(), supplierInfo.accuracyScore(),
+                getCategory(), supplierInfo.accuracyScore(),
                 getNetWeightInGrams(), getGrossWeightInGrams());
         return new ParsedRow(item, taxonomy);
     }
