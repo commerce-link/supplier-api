@@ -4,12 +4,20 @@ import pl.commercelink.taxonomy.UnifiedProductIdentifiers;
 
 public record Taxonomy(String ean, String mfn, String brand, String name,
                        String category, int dataAccuracyScore,
-                       Integer netWeightInGrams, Integer grossWeightInGrams) {
+                       Integer netWeightInGrams, Integer grossWeightInGrams,
+                       String rawCategory) {
 
     public static final String OTHER = "Other";
 
     public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A",
             OTHER, Integer.MAX_VALUE, null, null);
+
+    public Taxonomy(String ean, String mfn, String brand, String name,
+                    String category, int dataAccuracyScore,
+                    Integer netWeightInGrams, Integer grossWeightInGrams) {
+        this(ean, mfn, brand, name, category, dataAccuracyScore,
+                netWeightInGrams, grossWeightInGrams, null);
+    }
 
     public Taxonomy {
         ean = UnifiedProductIdentifiers.unifyEan(ean);

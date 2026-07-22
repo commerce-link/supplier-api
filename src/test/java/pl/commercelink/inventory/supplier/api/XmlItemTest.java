@@ -89,4 +89,52 @@ class XmlItemTest {
         assertFalse(xmlItem.isInStock());
         assertFalse(xmlItem.isInDelivery());
     }
+
+    @Test
+    void toParsedRowPassesRawCategoryIntoTaxonomy() {
+        // given
+        XmlItem withRawCategory = new XmlItem() {
+            @Override
+            public String getEan() { return "5901234123457"; }
+
+            @Override
+            public String getMfn() { return "MFN-1"; }
+
+            @Override
+            public String getBrand() { return "BrandX"; }
+
+            @Override
+            public String getName() { return "GeForce RTX"; }
+
+            @Override
+            public String getCategory() { return "GPU"; }
+
+            @Override
+            public double getNetPrice() { return 99.99; }
+
+            @Override
+            public int getQty() { return 3; }
+
+            @Override
+            public String getCurrency() { return "PLN"; }
+
+            @Override
+            public String getRawCategory() { return "Komputery > Karty graficzne"; }
+        };
+
+        // when
+        ParsedRow row = withRawCategory.toParsedRow(SUPPLIER);
+
+        // then
+        assertEquals("Komputery > Karty graficzne", row.taxonomy().rawCategory());
+    }
+
+    @Test
+    void toParsedRowDefaultsRawCategoryToNull() {
+        // when
+        ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
+
+        // then
+        assertNull(row.taxonomy().rawCategory());
+    }
 }

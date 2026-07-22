@@ -15,6 +15,7 @@ public interface XmlItem {
     default boolean isInDelivery() { return false; }
     default Integer getNetWeightInGrams() { return null; }
     default Integer getGrossWeightInGrams() { return null; }
+    default String getRawCategory() { return null; }
 
     default ParsedRow toParsedRow(SupplierInfo supplierInfo) {
         var item = new InventoryItem(getEan(), getMfn(), getNetPrice(), getCurrency(),
@@ -22,7 +23,7 @@ public interface XmlItem {
                 isSellable(), isInStock(), isInDelivery());
         var taxonomy = new Taxonomy(getEan(), getMfn(), getBrand(), getName(),
                 getCategory(), supplierInfo.accuracyScore(),
-                getNetWeightInGrams(), getGrossWeightInGrams());
+                getNetWeightInGrams(), getGrossWeightInGrams(), getRawCategory());
         return new ParsedRow(item, taxonomy);
     }
 }

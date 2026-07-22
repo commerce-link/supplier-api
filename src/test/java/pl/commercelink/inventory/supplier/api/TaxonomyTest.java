@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaxonomyTest {
@@ -58,5 +59,23 @@ class TaxonomyTest {
 
         // when / then
         assertFalse(taxonomy.isProcessable());
+    }
+
+    @Test
+    void eightArgConstructorLeavesRawCategoryNull() {
+        // given
+        Taxonomy taxonomy = new Taxonomy("5901234123457", "MFN-1", "BrandX", "Laptop Pro", "Laptops", 10, null, null);
+
+        // when / then
+        assertNull(taxonomy.rawCategory());
+    }
+
+    @Test
+    void rawCategoryIsCarriedThroughCanonicalConstructor() {
+        // given
+        Taxonomy taxonomy = new Taxonomy("5901234123457", "MFN-1", "BrandX", "Laptop Pro", "Laptops", 10, null, null, "Elektronika > Laptopy");
+
+        // when / then
+        assertEquals("Elektronika > Laptopy", taxonomy.rawCategory());
     }
 }
