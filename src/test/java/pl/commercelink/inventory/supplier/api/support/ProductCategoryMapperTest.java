@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ProductCategoryMapperTest {
 
@@ -26,13 +27,13 @@ class ProductCategoryMapperTest {
     void matchesGroupCaseInsensitivelyAndSubgroupExactly() {
         // when / then
         assertEquals("GPU", mapper.from("COMPONENTS", "Graphics Cards").toString());
-        assertEquals("Other", mapper.from("Components", "graphics cards").toString());
+        assertNull(mapper.from("Components", "graphics cards"));
     }
 
     @Test
-    void fallsBackToOtherForUnknownGroupOrSubgroup() {
+    void fallsBackToNullForUnknownGroupOrSubgroup() {
         // when / then
-        assertEquals("Other", mapper.from("Furniture", "Chairs").toString());
-        assertEquals("Other", mapper.from("Components", "Chairs").toString());
+        assertNull(mapper.from("Furniture", "Chairs"));
+        assertNull(mapper.from("Components", "Chairs"));
     }
 }

@@ -1,7 +1,5 @@
 package pl.commercelink.inventory.supplier.api.support;
 
-import pl.commercelink.inventory.supplier.api.Taxonomy;
-
 import java.util.Arrays;
 import java.util.List;
 
@@ -19,7 +17,7 @@ public class ProductCategoryMapper {
                 return mapping.productCategory;
             }
         }
-        return Taxonomy.OTHER;
+        return null;
     }
 
     public static class Mapping {

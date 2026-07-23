@@ -5,18 +5,22 @@ import pl.commercelink.taxonomy.UnifiedProductIdentifiers;
 public record Taxonomy(String ean, String mfn, String brand, String name,
                        String category, int dataAccuracyScore,
                        Integer netWeightInGrams, Integer grossWeightInGrams,
-                       String rawCategory) {
-
-    public static final String OTHER = "Other";
+                       String rawCategory, String categoryId) {
 
     public static final Taxonomy EMPTY = new Taxonomy("N/A", "N/A", "N/A", "N/A",
-            OTHER, Integer.MAX_VALUE, null, null);
+            null, Integer.MAX_VALUE, null, null);
 
-    public Taxonomy(String ean, String mfn, String brand, String name,
-                    String category, int dataAccuracyScore,
-                    Integer netWeightInGrams, Integer grossWeightInGrams) {
+    public Taxonomy(String ean, String mfn, String brand, String name, String category,
+                    int dataAccuracyScore, Integer netWeightInGrams, Integer grossWeightInGrams,
+                    String rawCategory) {
         this(ean, mfn, brand, name, category, dataAccuracyScore,
-                netWeightInGrams, grossWeightInGrams, null);
+                netWeightInGrams, grossWeightInGrams, rawCategory, null);
+    }
+
+    public Taxonomy(String ean, String mfn, String brand, String name, String category,
+                    int dataAccuracyScore, Integer netWeightInGrams, Integer grossWeightInGrams) {
+        this(ean, mfn, brand, name, category, dataAccuracyScore,
+                netWeightInGrams, grossWeightInGrams, null, null);
     }
 
     public Taxonomy {
@@ -25,11 +29,10 @@ public record Taxonomy(String ean, String mfn, String brand, String name,
     }
 
     public boolean isProcessable() {
-        return category != null
+        return category != null && !category.isBlank()
                 && ean != null && !ean.isEmpty()
                 && mfn != null && !mfn.isEmpty()
                 && brand != null && !brand.isEmpty()
-                && name != null && !name.isEmpty()
-                && !category.equals(OTHER);
+                && name != null && !name.isEmpty();
     }
 }

@@ -29,9 +29,9 @@ class TaxonomyTest {
     }
 
     @Test
-    void emptyTaxonomyHasOtherCategory() {
+    void emptyTaxonomyHasNullCategory() {
         // when / then
-        assertEquals("Other", Taxonomy.EMPTY.category());
+        assertNull(Taxonomy.EMPTY.category());
     }
 
     @Test
@@ -44,9 +44,9 @@ class TaxonomyTest {
     }
 
     @Test
-    void otherCategoryIsNotProcessable() {
+    void categorizedRowWithBlankIdentifierIsNotProcessable() {
         // given
-        Taxonomy taxonomy = new Taxonomy("5901234123457", "MFN-1", "BrandX", "Laptop Pro", "Other", 10, null, null);
+        Taxonomy taxonomy = new Taxonomy("", "", "BrandX", "Laptop Pro", "Laptops", 10, null, null);
 
         // when / then
         assertFalse(taxonomy.isProcessable());
@@ -77,5 +77,23 @@ class TaxonomyTest {
 
         // when / then
         assertEquals("Elektronika > Laptopy", taxonomy.rawCategory());
+    }
+
+    @Test
+    void nineArgConstructorLeavesCategoryIdNull() {
+        // given
+        Taxonomy taxonomy = new Taxonomy("5901234123457", "MFN-1", "BrandX", "Laptop Pro", "Laptops", 10, null, null, "Elektronika > Laptopy");
+
+        // when / then
+        assertNull(taxonomy.categoryId());
+    }
+
+    @Test
+    void tenArgConstructorStoresCategoryId() {
+        // given
+        Taxonomy taxonomy = new Taxonomy("5901234123457", "MFN-1", "BrandX", "Laptop Pro", "Laptops", 10, null, null, "Elektronika > Laptopy", "195");
+
+        // when / then
+        assertEquals("195", taxonomy.categoryId());
     }
 }
