@@ -41,17 +41,16 @@ class XmlItemTest {
     }
 
     @Test
-    void toParsedRowCarriesCategoryNameIntoTaxonomy() {
+    void toParsedRowFallsBackToCategoryWhenRawCategoryMissing() {
         // when
         ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
 
         // then
-        assertEquals("GPU", row.taxonomy().category().toString());
-        assertTrue(row.taxonomy().isProcessable());
+        assertEquals("GPU", row.product().rawCategory());
     }
 
     @Test
-    void toParsedRowCarriesItemAndTaxonomyFields() {
+    void toParsedRowCarriesItemAndProductFields() {
         // when
         ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
 
@@ -62,11 +61,11 @@ class XmlItemTest {
         assertEquals("PLN", row.item().currency());
         assertEquals(3, row.item().qty());
         assertEquals("SupplierX", row.item().supplier());
-        assertEquals("BrandX", row.taxonomy().brand());
-        assertEquals("GeForce RTX", row.taxonomy().name());
-        assertEquals(7, row.taxonomy().dataAccuracyScore());
-        assertNull(row.taxonomy().netWeightInGrams());
-        assertNull(row.taxonomy().grossWeightInGrams());
+        assertEquals("BrandX", row.product().brand());
+        assertEquals("GeForce RTX", row.product().name());
+        assertEquals(7, row.product().dataAccuracyScore());
+        assertNull(row.product().netWeightInGrams());
+        assertNull(row.product().grossWeightInGrams());
     }
 
     @Test
@@ -75,8 +74,8 @@ class XmlItemTest {
         ParsedRow row = item("0590123412345", "mfn 1").toParsedRow(SUPPLIER);
 
         // then
-        assertEquals("590123412345", row.taxonomy().ean());
-        assertEquals("MFN1", row.taxonomy().mfn());
+        assertEquals("590123412345", row.product().ean());
+        assertEquals("MFN1", row.product().mfn());
     }
 
     @Test
@@ -91,7 +90,7 @@ class XmlItemTest {
     }
 
     @Test
-    void toParsedRowPassesRawCategoryIntoTaxonomy() {
+    void toParsedRowUsesRawCategoryWhenPresent() {
         // given
         XmlItem withRawCategory = new XmlItem() {
             @Override
@@ -126,15 +125,6 @@ class XmlItemTest {
         ParsedRow row = withRawCategory.toParsedRow(SUPPLIER);
 
         // then
-        assertEquals("Komputery > Karty graficzne", row.taxonomy().rawCategory());
-    }
-
-    @Test
-    void toParsedRowDefaultsRawCategoryToNull() {
-        // when
-        ParsedRow row = item("5901234123457", "MFN-1").toParsedRow(SUPPLIER);
-
-        // then
-        assertNull(row.taxonomy().rawCategory());
+        assertEquals("Komputery > Karty graficzne", row.product().rawCategory());
     }
 }
