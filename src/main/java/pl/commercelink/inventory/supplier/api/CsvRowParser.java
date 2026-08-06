@@ -8,13 +8,9 @@ public interface CsvRowParser {
 
     default Optional<ParsedRow> tryParse(String[] row) {
         try {
-            ParsedRow result = parse(row);
-            if (result != null) {
-                return Optional.of(result);
-            }
+            return Optional.ofNullable(parse(row));
         } catch (Exception ex) {
-            System.out.println("Skipping row as it can't be parsed.");
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 }
