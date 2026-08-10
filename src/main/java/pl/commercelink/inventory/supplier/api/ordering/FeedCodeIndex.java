@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
 import static pl.commercelink.taxonomy.UnifiedProductIdentifiers.unifyEan;
@@ -28,7 +29,7 @@ public final class FeedCodeIndex implements ProductCodeResolver {
     private record Index(Map<String, SupplierProductCode> byEanAndMfn,
                          Map<String, SupplierProductCode> byEan) {}
 
-    private record CachedIndex(long loadedAt, Index index) {}
+    private record CachedIndex(long expiresAt, Index index) {}
 
     private final String supplierName;
     private final FeedSource feedSource;
@@ -39,18 +40,20 @@ public final class FeedCodeIndex implements ProductCodeResolver {
     private final int eanColumn;
     private final long timeToLiveMillis;
     private final Predicate<String> codeValidator;
-    private Index index;
+    private final UnaryOperator<String> codeNormalizer;
 
     private FeedCodeIndex(Builder builder) {
         this.supplierName = builder.supplierName;
         this.feedSource = builder.feedSource;
-        this.cacheKey = builder.cacheKey;
+        this.cacheKey = builder.supplierName + "|" + builder.cacheKey + "|" + builder.separator
+                + "|" + builder.codeColumn + "|" + builder.mfnColumn + "|" + builder.eanColumn;
         this.separator = Pattern.compile(Pattern.quote(builder.separator));
         this.codeColumn = builder.codeColumn;
         this.mfnColumn = builder.mfnColumn;
         this.eanColumn = builder.eanColumn;
         this.timeToLiveMillis = builder.timeToLive.toMillis();
         this.codeValidator = builder.codeValidator;
+        this.codeNormalizer = builder.codeNormalizer;
     }
 
     public static Builder builder(String supplierName, FeedSource feedSource) {
@@ -76,13 +79,12 @@ public final class FeedCodeIndex implements ProductCodeResolver {
     }
 
     private Index index() {
-        if (index == null) {
-            index = CACHE.compute(supplierName + "|" + cacheKey, (key, current) ->
-                    current != null && System.currentTimeMillis() - current.loadedAt() < timeToLiveMillis
-                            ? current
-                            : new CachedIndex(System.currentTimeMillis(), parse(fetchFeed()))).index();
-        }
-        return index;
+        long now = System.currentTimeMillis();
+        CACHE.entrySet().removeIf(entry -> now >= entry.getValue().expiresAt());
+        return CACHE.compute(cacheKey, (key, current) ->
+                current != null && now < current.expiresAt()
+                        ? current
+                        : new CachedIndex(now + timeToLiveMillis, parse(fetchFeed()))).index();
     }
 
     private byte[] fetchFeed() {
@@ -104,7 +106,8 @@ public final class FeedCodeIndex implements ProductCodeResolver {
             String code = columns[codeColumn].trim();
             String rawEan = columns[eanColumn].trim();
             if (!codeValidator.test(code) || !EAN_FORMAT.matcher(rawEan).matches()) return;
-            SupplierProductCode product = new SupplierProductCode(code, unifyEan(rawEan), columns[mfnColumn].trim());
+            SupplierProductCode product = new SupplierProductCode(
+                    codeNormalizer.apply(code), unifyEan(rawEan), columns[mfnColumn].trim());
             byEanAndMfn.putIfAbsent(eanAndMfnKey(rawEan, product.mfn()), product);
             byEan.putIfAbsent(product.ean(), product);
         });
@@ -126,6 +129,7 @@ public final class FeedCodeIndex implements ProductCodeResolver {
         private int eanColumn = -1;
         private Duration timeToLive = Duration.ofMinutes(15);
         private Predicate<String> codeValidator = code -> !code.isBlank();
+        private UnaryOperator<String> codeNormalizer = UnaryOperator.identity();
 
         private Builder(String supplierName, FeedSource feedSource) {
             this.supplierName = supplierName;
@@ -156,6 +160,11 @@ public final class FeedCodeIndex implements ProductCodeResolver {
 
         public Builder codeValidator(Predicate<String> codeValidator) {
             this.codeValidator = codeValidator;
+            return this;
+        }
+
+        public Builder codeNormalizer(UnaryOperator<String> codeNormalizer) {
+            this.codeNormalizer = codeNormalizer;
             return this;
         }
 

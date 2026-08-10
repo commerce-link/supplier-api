@@ -196,13 +196,48 @@ class FeedCodeIndexTest {
             fetches.incrementAndGet();
             return FEED.getBytes(StandardCharsets.UTF_8);
         };
-        FeedCodeIndex.Builder shortLived = FeedCodeIndex.builder("TestSupplier", countingSource)
-                .columns(0, 1, 5).cacheKey("token-1").timeToLive(Duration.ofMillis(20));
+        FeedCodeIndex shortLived = FeedCodeIndex.builder("TestSupplier", countingSource)
+                .columns(0, 1, 5).cacheKey("token-1").timeToLive(Duration.ofMillis(20)).build();
 
         // when
-        shortLived.build().resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
+        shortLived.resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
         Thread.sleep(40);
-        shortLived.build().resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
+        shortLived.resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
+
+        // then
+        assertEquals(2, fetches.get());
+    }
+
+    @Test
+    void normalizesCodesWithConfiguredNormalizer() {
+        // given
+        String feed = "0101;MFN-A;BrandA;Cat;Product A;" + EAN_A + "\n";
+        FeedCodeIndex index = builder(feed)
+                .codeNormalizer(code -> String.valueOf(Integer.parseInt(code)))
+                .build();
+
+        // when / then
+        assertEquals(Optional.of(new SupplierProductCode("101", EAN_A, "MFN-A")),
+                index.resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1)));
+        assertEquals(EAN_A, index.eanByCode().get("101"));
+    }
+
+    @Test
+    void cachesSeparatelyPerParseConfiguration() {
+        // given
+        AtomicInteger fetches = new AtomicInteger();
+        FeedCodeIndex.FeedSource countingSource = () -> {
+            fetches.incrementAndGet();
+            return FEED.getBytes(StandardCharsets.UTF_8);
+        };
+        FeedCodeIndex first = FeedCodeIndex.builder("TestSupplier", countingSource)
+                .columns(0, 1, 5).cacheKey("token-1").build();
+        FeedCodeIndex second = FeedCodeIndex.builder("TestSupplier", countingSource)
+                .columns(1, 0, 5).cacheKey("token-1").build();
+
+        // when
+        first.resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
+        second.resolve(new SupplierOrderLine(EAN_A, "MFN-A", 1));
 
         // then
         assertEquals(2, fetches.get());
