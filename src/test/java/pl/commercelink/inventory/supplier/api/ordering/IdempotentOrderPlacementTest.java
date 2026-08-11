@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class IdempotentOrderPlacementTest {
 
     private static final SupplierPurchaseRequest REQUEST = new SupplierPurchaseRequest(
-            "ref-1", List.of(new SupplierOrderLine("4006381333931", "MFN-A", 2)));
+            "ref-1", List.of(new SupplierOrderLine("SKU-A", "4006381333931", "MFN-A", 2)));
 
     private static class TestPlacement extends IdempotentOrderPlacement<String, String> {
 

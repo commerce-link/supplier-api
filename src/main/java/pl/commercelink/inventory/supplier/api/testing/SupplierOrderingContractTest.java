@@ -34,7 +34,7 @@ public abstract class SupplierOrderingContractTest {
     /** Provider short on at least one line of {@link #sampleLines()}. */
     protected abstract SupplierProvider providerWithShortage();
 
-    /** Order lines known to the adapter's fixture, each fully orderable from {@link #providerFullyAvailable()}. */
+    /** Order lines known to the adapter's fixture, each with a filled supplier sku and fully orderable from {@link #providerFullyAvailable()}. */
     protected abstract List<SupplierOrderLine> sampleLines();
 
     /** A client order reference never used before in this JVM (adapters may cache orders statically). */
@@ -55,9 +55,9 @@ public abstract class SupplierOrderingContractTest {
         return Optional.empty();
     }
 
-    /** A line for a product the supplier does not carry. */
+    /** A line for a product the supplier does not carry — its {@code sku} is null. */
     protected SupplierOrderLine unknownProductLine() {
-        return new SupplierOrderLine("9999999999990", "TCK-UNKNOWN", 1);
+        return new SupplierOrderLine(null, "9999999999990", "TCK-UNKNOWN", 1);
     }
 
     /** Number of orders actually placed at the (fake) supplier since the test started, if observable. */

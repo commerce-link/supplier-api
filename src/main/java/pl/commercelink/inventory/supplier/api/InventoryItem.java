@@ -15,7 +15,8 @@ public record InventoryItem(
         String supplier,
         boolean sellable,
         boolean inStock,
-        boolean inDelivery
+        boolean inDelivery,
+        String sku
 ) {
 
     private static final String MISSING_EAN_PLACEHOLDER = "1111111111111";
@@ -26,11 +27,16 @@ public record InventoryItem(
     }
 
     public InventoryItem(String ean, String mfn, double netPrice, String currency, int qty, int leadTimeDays, String supplier) {
-        this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, true, false, false);
+        this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, true, false, false, null);
     }
 
     public InventoryItem(String ean, String mfn, double netPrice, String currency, int qty, int leadTimeDays, String supplier, boolean sellable) {
-        this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, false, false);
+        this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, false, false, null);
+    }
+
+    public InventoryItem(String ean, String mfn, double netPrice, String currency, int qty,
+                         int leadTimeDays, String supplier, boolean sellable, boolean inStock, boolean inDelivery) {
+        this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery, null);
     }
 
     public String uuid() {
@@ -60,11 +66,16 @@ public record InventoryItem(
     public Optional<InventoryItem> toLocalCurrency(String localCurrency, Double exchangeRate) {
         if (localCurrency.equals(currency)) return Optional.of(this);
         if (exchangeRate == null) return Optional.empty();
-        return Optional.of(new InventoryItem(ean, mfn, Math.round(netPrice * exchangeRate), localCurrency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery));
+        return Optional.of(new InventoryItem(ean, mfn, Math.round(netPrice * exchangeRate), localCurrency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery, sku));
     }
 
     public InventoryItem withEan(String newEan) {
-        return new InventoryItem(newEan, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery);
+        return new InventoryItem(newEan, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery, sku);
+    }
+
+    public InventoryItem withSku(String sku) {
+        return new InventoryItem(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier,
+                sellable, inStock, inDelivery, sku);
     }
 
 }
