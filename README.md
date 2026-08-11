@@ -6,7 +6,8 @@ This module defines the contracts that all supplier implementations (AbGroup, Ac
 
 - **`SupplierProviderDescriptor`** — provider-api descriptor every supplier implements (extends `ProviderDescriptor<SupplierProvider>`). Declares `create(config)`, `feedFormat()`, `supplierInfo()`, and `configurationFields()`.
 - **`SupplierProvider`** — config-bound runtime produced by `SupplierProviderDescriptor.create(config)`. Declares `download()`.
-- **`InventoryItem`** — core inventory record (EAN, MFN, price, quantity, supplier).
+- **`InventoryItem`** — core inventory record (EAN, MFN, price, quantity, supplier), plus the
+  supplier's own product code (`sku`), filled by the feed parser and left unnormalized.
 - **`Taxonomy`** — product taxonomy record (brand, name, category) extracted from supplier feeds.
 - **`FeedFormat`** — sealed interface discriminating CSV and XML feed formats.
 - **`CsvRowParser`** / **`XmlItem`** — parser contracts for feed data.
@@ -50,6 +51,9 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
    HTTP or client exceptions; the application's error handling keys on the SPI type.
 6. **Fail closed** — `checkAvailability` quotes quantity 0 for an unknown product or a missing
    price, never an optimistic guess.
+7. **Missing sku fails closed** — an order line whose `sku` is null is quoted quantity 0 by
+   `checkAvailability` without a remote call for that line, and rejected by `placeOrder` with
+   `SupplierOrderException` naming the EAN before any ordering call.
 
 ### Contract test kit
 
@@ -79,14 +83,12 @@ Common mechanics extracted from real adapters — the parts that repeat per supp
 excluding HTTP contract mapping (DTOs, endpoints, auth, error semantics), which stays explicit
 per adapter:
 
-- **`ProductCodeResolver`** / **`SupplierProductCode`** — strategy for mapping an EAN/MFN order
-  line to the supplier's internal product code (most distributors key their order APIs by
-  internal code, not EAN).
-- **`FeedCodeIndex`** — feed-based `ProductCodeResolver`: parameterized column indices and
-  separator, per-cache-key TTL cache, EAN format validation (8–14 digits, rejects rows shifted
-  by stray separators), exact EAN+MFN match preferred over EAN-only for duplicate-EAN feeds,
-  fails closed. Suppliers exposing a product-lookup endpoint implement `ProductCodeResolver`
-  directly instead.
+- **Sku flow** — the feed parser writes the supplier's product code into `InventoryItem.sku`
+  (normalizing it per supplier as needed); the application looks the sku up from its own
+  inventory when building `SupplierOrderLine`s; adapters read `line.sku()` directly when calling
+  the supplier's ordering API. No feed re-download and no resolver layer are needed at order
+  time. `FeedSource` (in `api.support`) is the injectable feed-bytes seam adapters use for
+  `download()` and for tests.
 - **`IdempotentOrderPlacement<L, O>`** — skeleton for `placeOrder` owning the universal
   sequence: blank-ref guard → line translation → per-ref lock → replay lookup → placement →
   order id verification → result mapping, with every failure wrapped in
