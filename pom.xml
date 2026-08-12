@@ -5,7 +5,7 @@
 
     <groupId>pl.commercelink</groupId>
     <artifactId>supplier-api</artifactId>
-    <version>0.2.2</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
 
     <name>supplier-api</name>
@@ -50,7 +50,7 @@
         <dependency>
             <groupId>pl.commercelink</groupId>
             <artifactId>provider-api</artifactId>
-            <version>0.1.4</version>
+            <version>0.1.6</version>
         </dependency>
         <dependency>
             <groupId>pl.commercelink</groupId>
@@ -66,6 +66,12 @@
             <groupId>com.jcraft</groupId>
             <artifactId>jsch</artifactId>
             <version>0.1.55</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.10.2</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
