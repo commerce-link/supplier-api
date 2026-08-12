@@ -54,6 +54,11 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
 7. **Missing sku fails closed** — an order line whose `sku` is null is quoted quantity 0 by
    `checkAvailability` without a remote call for that line, and rejected by `placeOrder` with
    `SupplierOrderException` naming the EAN before any ordering call.
+8. **Delivery address fails closed** — a provider returning `true` from
+   `requiresDeliveryAddress()` lists the account's addresses in `deliveryAddresses()` and raises
+   `SupplierOrderException` when the list cannot be fetched or comes back empty, and when
+   `placeOrder` is called without a `deliveryAddressId`. Shipping to a guessed address is worse
+   than not ordering, so the application blocks the purchase instead of falling back.
 
 ### Contract test kit
 
@@ -74,8 +79,11 @@ class MyOrderingContractTest extends SupplierOrderingContractTest {
 The four required hooks build providers backed by the adapter's own fixtures (a static feed, a
 stubbed HTTP client). Optional hooks unlock the remaining scenarios and stricter assertions:
 `providerReturningBlankOrderId()`, `providerWithFailingBackend()`, `providerWithMissingPrice()`,
-`unknownProductLine()`, and the observability counters `remoteOrdersPlaced()` / `remoteCalls()`.
-Tests for optional hooks left at their defaults are skipped with an assumption message.
+`unknownProductLine()`, `deliveryAddressId()`, and the observability counters
+`remoteOrdersPlaced()` / `remoteCalls()`. Tests for optional hooks left at their defaults are
+skipped with an assumption message. Adapters requiring a delivery address override
+`deliveryAddressId()` with a value their fixture accepts — the kit builds every purchase request
+through it and additionally checks the address rules from contract point 8.
 
 ### Ordering building blocks (`api.ordering` package)
 
