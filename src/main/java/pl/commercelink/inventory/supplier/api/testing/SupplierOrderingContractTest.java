@@ -1,6 +1,7 @@
 package pl.commercelink.inventory.supplier.api.testing;
 
 import org.junit.jupiter.api.Test;
+import pl.commercelink.inventory.supplier.api.SupplierDeliveryAddress;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -55,6 +56,14 @@ public abstract class SupplierOrderingContractTest {
         return Optional.empty();
     }
 
+    /**
+     * Delivery address the adapter's fixture accepts, for suppliers that require one; left null
+     * by adapters whose supplier takes the address from the account.
+     */
+    protected String deliveryAddressId() {
+        return null;
+    }
+
     /** A line for a product the supplier does not carry — its {@code sku} is null. */
     protected SupplierOrderLine unknownProductLine() {
         return new SupplierOrderLine(null, "9999999999990", "TCK-UNKNOWN", 1);
@@ -83,7 +92,7 @@ public abstract class SupplierOrderingContractTest {
 
         // when
         SupplierOrderResult result = provider.placeOrder(
-                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines()));
+                purchaseRequest(uniqueClientOrderRef(), sampleLines()));
 
         // then
         assertNotNull(result.externalOrderId());
@@ -94,7 +103,7 @@ public abstract class SupplierOrderingContractTest {
     void placeOrderRetriedWithSameRefDoesNotPlaceSecondOrder() {
         // given
         SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
 
         // when
         SupplierOrderResult first = provider.placeOrder(request);
@@ -110,7 +119,7 @@ public abstract class SupplierOrderingContractTest {
     void placeOrderWithShortageThrowsWithoutPlacingPartialOrder() {
         // given
         SupplierProvider provider = providerWithShortage();
-        SupplierPurchaseRequest request = new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
 
         // when / then
         assertThrows(SupplierOrderException.class, () -> provider.placeOrder(request));
@@ -124,7 +133,7 @@ public abstract class SupplierOrderingContractTest {
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(new SupplierPurchaseRequest(" ", sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(" ", sampleLines())));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
@@ -135,7 +144,7 @@ public abstract class SupplierOrderingContractTest {
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(new SupplierPurchaseRequest(null, sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(null, sampleLines())));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
@@ -146,7 +155,7 @@ public abstract class SupplierOrderingContractTest {
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -156,7 +165,7 @@ public abstract class SupplierOrderingContractTest {
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -192,6 +201,40 @@ public abstract class SupplierOrderingContractTest {
         // then
         assertFalse(quotes.isEmpty());
         quotes.forEach(quote -> assertEquals(0, quote.availableQuantity()));
+    }
+
+    @Test
+    void deliveryAddressesAreListedWhenRequired() {
+        // given
+        SupplierProvider provider = assumeAddressRequired();
+
+        // when
+        List<SupplierDeliveryAddress> addresses = provider.deliveryAddresses();
+
+        // then
+        assertFalse(addresses.isEmpty());
+        addresses.forEach(address -> assertFalse(address.id().isBlank()));
+    }
+
+    @Test
+    void placeOrderWithoutRequiredDeliveryAddressThrows() {
+        // given
+        SupplierProvider provider = assumeAddressRequired();
+
+        // when / then
+        assertThrows(SupplierOrderException.class, () -> provider.placeOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines(), null)));
+        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    private SupplierProvider assumeAddressRequired() {
+        SupplierProvider provider = providerFullyAvailable();
+        assumeTrue(provider.requiresDeliveryAddress(), "Supplier takes the delivery address from the account");
+        return provider;
+    }
+
+    protected final SupplierPurchaseRequest purchaseRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
+        return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId());
     }
 
     private static SupplierProvider assumePresent(Optional<SupplierProvider> provider, String scenario) {

@@ -28,6 +28,7 @@ class IdempotentOrderPlacementTest {
         private RuntimeException translationFailure;
         private RuntimeException replayCheckFailure;
         private RuntimeException placementFailure;
+        private SupplierPurchaseRequest placedWith;
 
         SupplierOrderResult place(SupplierPurchaseRequest request) {
             return placeIdempotently(request);
@@ -53,8 +54,9 @@ class IdempotentOrderPlacementTest {
         }
 
         @Override
-        protected String placeNewOrder(String clientOrderRef, List<String> lines) {
+        protected String placeNewOrder(SupplierPurchaseRequest request, List<String> lines) {
             callLog.add("place");
+            placedWith = request;
             if (placementFailure != null) throw placementFailure;
             return placedOrder;
         }
@@ -82,6 +84,21 @@ class IdempotentOrderPlacementTest {
         // then
         assertEquals("PO-1", result.externalOrderId());
         assertEquals(List.of("translate", "findExisting", "place", "toResult:PO-1"), placement.callLog);
+    }
+
+    @Test
+    void handsWholeRequestIncludingDeliveryAddressToPlacement() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        SupplierPurchaseRequest request = new SupplierPurchaseRequest(
+                "ref-addr", REQUEST.lines(), "17200617");
+
+        // when
+        placement.place(request);
+
+        // then
+        assertEquals("17200617", placement.placedWith.deliveryAddressId());
+        assertEquals("ref-addr", placement.placedWith.clientOrderRef());
     }
 
     @Test

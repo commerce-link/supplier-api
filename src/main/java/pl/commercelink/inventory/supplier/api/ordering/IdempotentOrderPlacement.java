@@ -30,7 +30,7 @@ public abstract class IdempotentOrderPlacement<L, O> {
                         () -> toResult(existing.orElseThrow(), request));
             }
             O order = wrapFailures("order placement failed",
-                    () -> placeNewOrder(clientOrderRef, lines));
+                    () -> placeNewOrder(request, lines));
             String externalOrderId = wrapFailures("order id extraction failed",
                     () -> order == null ? null : externalOrderId(order));
             if (externalOrderId == null || externalOrderId.isBlank()) {
@@ -47,7 +47,7 @@ public abstract class IdempotentOrderPlacement<L, O> {
 
     protected abstract Optional<O> findExistingOrder(String clientOrderRef);
 
-    protected abstract O placeNewOrder(String clientOrderRef, List<L> lines);
+    protected abstract O placeNewOrder(SupplierPurchaseRequest request, List<L> lines);
 
     protected abstract String externalOrderId(O order);
 
