@@ -59,6 +59,11 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
    `SupplierOrderException` when the list cannot be fetched or comes back empty, and when
    `placeOrder` is called without a `deliveryAddressId`. Shipping to a guessed address is worse
    than not ordering, so the application blocks the purchase instead of falling back.
+9. **Literal shipping address model** — a provider that accepts a free-form delivery address
+   inside the order document overrides `acceptsShippingAddress()` to return `true` and reads the
+   address from `SupplierPurchaseRequest.shippingAddress()`; the application sources those
+   addresses from the store's own address book. The two address models (registered on the account
+   vs. literal in the document) are mutually exclusive (enforced by the TCK).
 
 ### Contract test kit
 

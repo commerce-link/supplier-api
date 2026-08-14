@@ -217,6 +217,13 @@ public abstract class SupplierOrderingContractTest {
     }
 
     @Test
+    void addressModelsAreMutuallyExclusive() {
+        SupplierProvider provider = providerFullyAvailable();
+        assertFalse(provider.requiresDeliveryAddress() && provider.acceptsShippingAddress(),
+                "A supplier either picks an address registered on the account or takes a literal one, not both");
+    }
+
+    @Test
     void placeOrderWithoutRequiredDeliveryAddressThrows() {
         // given
         SupplierProvider provider = assumeAddressRequired();
