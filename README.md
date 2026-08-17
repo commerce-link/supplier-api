@@ -85,6 +85,30 @@ skipped with an assumption message. Adapters requiring a delivery address overri
 `deliveryAddressId()` with a value their fixture accepts — the kit builds every purchase request
 through it and additionally checks the address rules from contract point 8.
 
+## Dropship contract
+
+Providers that return `true` from `supportsDropshipping()` implement
+`placeDropshipOrder(request)`. Dropshipping is deliberately a separate capability from
+`supportsOrdering()`: real suppliers expose it as a different endpoint with its own contract
+(e.g. ELKO `POST /Orders/EndUser` vs `POST /Orders`) and it may hinge on a separate business
+agreement (ELKO requires a signed B2C agreement), so an adapter can support either capability
+without the other.
+
+Rules 1-7 of the ordering contract apply unchanged to `placeDropshipOrder` (idempotency per
+`clientOrderRef`, all-or-nothing, order id required, ref guard, single failure type, fail
+closed, missing sku fails closed). Instead of rule 8, dropshipping adds:
+
+8a. **Consignee required** — a `SupplierDropshipRequest` without a consignee raises
+   `SupplierOrderException` before any remote call. `SupplierConsignee` itself refuses to be
+   constructed without street/postal/city/country, a company or full personal name, a phone and
+   an email — carriers notify the end customer directly, so incomplete contact data would
+   surface as a delivery failure days later.
+
+The contract is executable: adapters extend `api.testing.SupplierDropshipContractTest`
+(required hooks `dropshipProvider()`, `dropshipProviderWithShortage()`, `sampleLines()`,
+`uniqueClientOrderRef()`; optional `sampleConsignee()`, `dropshipProviderWithFailingBackend()`,
+`remoteDropshipOrdersPlaced()`, `remoteCalls()`).
+
 ### Ordering building blocks (`api.ordering` package)
 
 Common mechanics extracted from real adapters — the parts that repeat per supplier, deliberately
