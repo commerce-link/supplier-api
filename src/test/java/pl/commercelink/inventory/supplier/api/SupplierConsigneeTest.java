@@ -9,40 +9,48 @@ class SupplierConsigneeTest {
 
     @Test
     void acceptsNaturalPersonWithFullContactData() {
+        // when
         SupplierConsignee consignee = new SupplierConsignee(null, "Jan", "Kowalski",
                 "ul. Polna 1", "00-001", "Warszawa", "PL", "+48601234567", "jan@example.com");
 
+        // then
         assertEquals("Jan Kowalski", consignee.recipientName());
     }
 
     @Test
     void acceptsCompanyWithoutPersonalName() {
+        // when
         SupplierConsignee consignee = new SupplierConsignee("ACME Sp. z o.o.", null, null,
                 "ul. Polna 1", "00-001", "Warszawa", "PL", "+48601234567", "biuro@example.com");
 
+        // then
         assertEquals("ACME Sp. z o.o.", consignee.recipientName());
     }
 
     @Test
     void rejectsMissingPhone() {
+        // when / then
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
                 "ul. Polna 1", "00-001", "Warszawa", "PL", " ", "jan@example.com"));
     }
 
     @Test
     void rejectsMissingEmail() {
+        // when / then
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
                 "ul. Polna 1", "00-001", "Warszawa", "PL", "+48601234567", null));
     }
 
     @Test
     void rejectsMissingRecipientIdentity() {
+        // when / then
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", null,
                 "ul. Polna 1", "00-001", "Warszawa", "PL", "+48601234567", "jan@example.com"));
     }
 
     @Test
     void rejectsMissingAddressParts() {
+        // when / then
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
                 null, "00-001", "Warszawa", "PL", "+48601234567", "jan@example.com"));
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
@@ -53,6 +61,7 @@ class SupplierConsigneeTest {
 
     @Test
     void rejectsCountryOutsideIsoAlpha2() {
+        // when / then
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
                 "ul. Polna 1", "00-001", "Warszawa", "pl", "+48601234567", "jan@example.com"));
         assertThrows(IllegalArgumentException.class, () -> new SupplierConsignee(null, "Jan", "Kowalski",
