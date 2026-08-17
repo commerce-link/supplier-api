@@ -32,6 +32,26 @@ public interface SupplierProvider {
         return List.of();
     }
 
+    /**
+     * Whether the supplier can ship an order directly to the end customer (dropshipping).
+     * Independent from {@link #supportsOrdering()}: real suppliers expose dropshipping as a
+     * different endpoint with its own contract (e.g. ELKO {@code /Orders/EndUser}) and it may
+     * hinge on a separate business agreement, so an adapter can support either capability
+     * without the other.
+     */
+    default boolean supportsDropshipping() {
+        return false;
+    }
+
+    /**
+     * Places an order shipped by the supplier straight to {@link SupplierDropshipRequest#consignee()}.
+     * Same rules as {@link #placeOrder}: idempotent per {@code clientOrderRef}, all-or-nothing on
+     * availability, failures surface only as {@link SupplierOrderException}.
+     */
+    default SupplierOrderResult placeDropshipOrder(SupplierDropshipRequest request) {
+        throw new UnsupportedOperationException("Dropshipping not supported by this supplier");
+    }
+
     default List<SupplierQuote> checkAvailability(List<SupplierOrderLine> lines) {
         throw new UnsupportedOperationException("Ordering not supported by this supplier");
     }
