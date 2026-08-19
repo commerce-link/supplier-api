@@ -65,7 +65,10 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
 The contract is executable: `api.testing.SupplierOrderingContractTest` is an abstract JUnit 5
 class published in the main artifact (its JUnit dependency is `provided`-scoped, so it adds
 nothing to the runtime classpath; the main artifact was chosen over a test-jar so the shared CI
-publish workflow needs no changes). Every ordering adapter extends it in its own test suite:
+publish workflow needs no changes). Rules 1, 2, 4 and 5 (idempotency, all-or-nothing, ref guard,
+single failure type) are shared with the dropship contract and enforced by the common base
+`api.testing.SupplierPlacementContractTest`, which this kit extends. Every ordering adapter
+extends it in its own test suite:
 
 ```java
 class MyOrderingContractTest extends SupplierOrderingContractTest {
@@ -107,7 +110,9 @@ closed, missing sku fails closed). Instead of rule 8, dropshipping adds:
 The contract is executable: adapters extend `api.testing.SupplierDropshipContractTest`
 (required hooks `dropshipProvider()`, `dropshipProviderWithShortage()`, `sampleLines()`,
 `uniqueClientOrderRef()`; optional `sampleConsignee()`, `dropshipProviderWithFailingBackend()`,
-`remoteDropshipOrdersPlaced()`, `remoteCalls()`).
+`remoteDropshipOrdersPlaced()`, `remoteCalls()`). Like the ordering kit, it extends the common
+base `api.testing.SupplierPlacementContractTest`, which enforces the shared placement rules
+(idempotency, all-or-nothing, ref guard, single failure type).
 
 ### Ordering building blocks (`api.ordering` package)
 
