@@ -1,6 +1,8 @@
 package pl.commercelink.inventory.supplier.api.ordering;
 
 import org.junit.jupiter.api.Test;
+import pl.commercelink.inventory.supplier.api.SupplierConsignee;
+import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -20,6 +22,11 @@ class IdempotentOrderPlacementTest {
     private static final SupplierPurchaseRequest REQUEST = new SupplierPurchaseRequest(
             "ref-1", List.of(new SupplierOrderLine("SKU-A", "4006381333931", "MFN-A", 2)));
 
+    private static final SupplierConsignee CONSIGNEE = new SupplierConsignee(null, "Jan", "Kowalski",
+            "ul. Polna 1", "00-001", "Warszawa", "PL", "+48601234567", "jan.kowalski@example.com");
+    private static final SupplierDropshipRequest DROPSHIP_REQUEST = new SupplierDropshipRequest(
+            "ref-ds-1", REQUEST.lines(), CONSIGNEE);
+
     private static class TestPlacement extends IdempotentOrderPlacement<String, String> {
 
         private final List<String> callLog = new ArrayList<>();
@@ -29,9 +36,14 @@ class IdempotentOrderPlacementTest {
         private RuntimeException replayCheckFailure;
         private RuntimeException placementFailure;
         private SupplierPurchaseRequest placedWith;
+        private SupplierDropshipRequest dropshipPlacedWith;
 
         SupplierOrderResult place(SupplierPurchaseRequest request) {
             return placeIdempotently(request);
+        }
+
+        SupplierOrderResult placeDropship(SupplierDropshipRequest request) {
+            return placeDropshipIdempotently(request);
         }
 
         @Override
@@ -57,6 +69,14 @@ class IdempotentOrderPlacementTest {
         protected String placeNewOrder(SupplierPurchaseRequest request, List<String> lines) {
             callLog.add("place");
             placedWith = request;
+            if (placementFailure != null) throw placementFailure;
+            return placedOrder;
+        }
+
+        @Override
+        protected String placeNewDropshipOrder(SupplierDropshipRequest request, List<String> lines) {
+            callLog.add("placeDropship");
+            dropshipPlacedWith = request;
             if (placementFailure != null) throw placementFailure;
             return placedOrder;
         }
@@ -200,5 +220,77 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("TestSupplier rejected purchase order: no stock", exception.getMessage());
+    }
+
+    @Test
+    void placesDropshipOrderWhenNoExistingOrderFound() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when
+        SupplierOrderResult result = placement.placeDropship(DROPSHIP_REQUEST);
+
+        // then
+        assertEquals("PO-1", result.externalOrderId());
+        assertEquals(List.of("translate", "findExisting", "placeDropship", "toResult:PO-1"), placement.callLog);
+        assertEquals(CONSIGNEE, placement.dropshipPlacedWith.consignee());
+    }
+
+    @Test
+    void dropshipRetryReturnsExistingOrderWithoutPlacingSecond() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-EXISTING";
+
+        // when
+        SupplierOrderResult result = placement.placeDropship(DROPSHIP_REQUEST);
+
+        // then
+        assertEquals("PO-EXISTING", result.externalOrderId());
+        assertEquals(List.of("translate", "findExisting", "toResult:PO-EXISTING"), placement.callLog);
+    }
+
+    @Test
+    void dropshipBlankRefThrowsBeforeAnyHook() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when / then
+        assertThrows(SupplierOrderException.class, () -> placement.placeDropship(
+                new SupplierDropshipRequest(" ", REQUEST.lines(), CONSIGNEE)));
+        assertTrue(placement.callLog.isEmpty());
+    }
+
+    @Test
+    void dropshipNullConsigneeThrowsBeforeAnyHook() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when / then
+        assertThrows(SupplierOrderException.class, () -> placement.placeDropship(
+                new SupplierDropshipRequest("ref-ds-2", REQUEST.lines(), null)));
+        assertTrue(placement.callLog.isEmpty());
+    }
+
+    @Test
+    void dropshipWithoutPlacementOverrideSurfacesAsSupplierOrderException() {
+        // given — a placement that never overrode the dropship hook
+        IdempotentOrderPlacement<String, String> placement = new IdempotentOrderPlacement<>() {
+            @Override protected String supplierName() { return "NoDropship"; }
+            @Override protected String toSupplierLine(SupplierOrderLine line) { return line.ean(); }
+            @Override protected Optional<String> findExistingOrder(String clientOrderRef) { return Optional.empty(); }
+            @Override protected String placeNewOrder(SupplierPurchaseRequest request, List<String> lines) { return "PO-1"; }
+            @Override protected String externalOrderId(String order) { return order; }
+            @Override protected SupplierOrderResult toResult(String order, SupplierPurchaseRequest request) {
+                return new SupplierOrderResult(order, 0, "PLN", List.of());
+            }
+        };
+
+        // when
+        SupplierOrderException e = assertThrows(SupplierOrderException.class,
+                () -> placement.placeDropshipIdempotently(DROPSHIP_REQUEST));
+
+        // then
+        assertInstanceOf(UnsupportedOperationException.class, e.getCause());
     }
 }

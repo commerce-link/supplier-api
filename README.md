@@ -126,6 +126,10 @@ per adapter:
   order id verification → result mapping, with every failure wrapped in
   `SupplierOrderException`. The adapter fills the supplier-specific holes: `toSupplierLine`,
   `findExistingOrder`, `placeNewOrder`, `externalOrderId`, `toResult`.
+  The dropship twin `placeDropshipIdempotently` runs the same sequence for
+  `SupplierDropshipRequest` (consignee guard included) with hooks
+  `findExistingDropshipOrder` (defaults to `findExistingOrder`),
+  `placeNewDropshipOrder` and `toDropshipResult` (defaults to `toResult`).
 - **`OrderingValues`** — conservative stock-quantity parsing (`"1 000+"` → 1000, non-numeric →
   0), currency fallback, URL-safe path encoding of client refs.
 
