@@ -15,31 +15,25 @@ import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Executable ordering contract for {@link SupplierProvider} implementations; every ordering
  * adapter ships a test class extending this kit. Required hooks build providers backed by the
  * adapter's own fixtures; optional hooks cover failure scenarios not every adapter can simulate
- * and skip their tests when left at the defaults. The enforced rules are documented in the
- * supplier-api README under "Ordering contract".
+ * and skip their tests when left at the defaults. The rules shared with the dropship contract
+ * (idempotency, all-or-nothing, ref guard, single failure type) are enforced by the common base
+ * {@link SupplierPlacementContractTest}. The enforced rules are documented in the supplier-api
+ * README under "Ordering contract".
  */
-public abstract class SupplierOrderingContractTest {
+public abstract class SupplierOrderingContractTest extends SupplierPlacementContractTest {
 
     /** Provider able to fulfil every line of {@link #sampleLines()}. */
     protected abstract SupplierProvider providerFullyAvailable();
 
     /** Provider short on at least one line of {@link #sampleLines()}. */
     protected abstract SupplierProvider providerWithShortage();
-
-    /** Order lines known to the adapter's fixture, each with a filled supplier sku and fully orderable from {@link #providerFullyAvailable()}. */
-    protected abstract List<SupplierOrderLine> sampleLines();
-
-    /** A client order reference never used before in this JVM (adapters may cache orders statically). */
-    protected abstract String uniqueClientOrderRef();
 
     /** Provider whose backend answers a placement with a blank or missing order id. */
     protected Optional<SupplierProvider> providerReturningBlankOrderId() {
@@ -74,94 +68,41 @@ public abstract class SupplierOrderingContractTest {
         return OptionalInt.empty();
     }
 
-    /** Number of remote backend interactions since the test started, if observable. */
-    protected OptionalInt remoteCalls() {
-        return OptionalInt.empty();
+    @Override
+    protected final SupplierProvider placementProvider() {
+        return providerFullyAvailable();
     }
 
-    @Test
-    void providerReportsOrderingSupport() {
-        // when / then
-        assertTrue(providerFullyAvailable().supportsOrdering());
+    @Override
+    protected final SupplierProvider placementProviderWithShortage() {
+        return providerWithShortage();
     }
 
-    @Test
-    void placeOrderReturnsExternalOrderId() {
-        // given
-        SupplierProvider provider = providerFullyAvailable();
-
-        // when
-        SupplierOrderResult result = provider.placeOrder(
-                purchaseRequest(uniqueClientOrderRef(), sampleLines()));
-
-        // then
-        assertNotNull(result.externalOrderId());
-        assertFalse(result.externalOrderId().isBlank());
+    @Override
+    protected final Optional<SupplierProvider> placementProviderWithFailingBackend() {
+        return providerWithFailingBackend();
     }
 
-    @Test
-    void placeOrderRetriedWithSameRefDoesNotPlaceSecondOrder() {
-        // given
-        SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
-
-        // when
-        SupplierOrderResult first = provider.placeOrder(request);
-        SupplierOrderResult second = provider.placeOrder(request);
-
-        // then
-        assertEquals(first.externalOrderId(), second.externalOrderId());
-        assertEquals(first.totalNet(), second.totalNet());
-        remoteOrdersPlaced().ifPresent(count -> assertEquals(1, count));
+    @Override
+    protected final OptionalInt remotePlacedOrders() {
+        return remoteOrdersPlaced();
     }
 
-    @Test
-    void placeOrderWithShortageThrowsWithoutPlacingPartialOrder() {
-        // given
-        SupplierProvider provider = providerWithShortage();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
-
-        // when / then
-        assertThrows(SupplierOrderException.class, () -> provider.placeOrder(request));
-        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    @Override
+    protected final boolean supportsPlacement(SupplierProvider provider) {
+        return provider.supportsOrdering();
     }
 
-    @Test
-    void placeOrderWithBlankRefThrowsBeforeAnyRemoteCall() {
-        // given
-        SupplierProvider provider = providerFullyAvailable();
-
-        // when / then
-        assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(purchaseRequest(" ", sampleLines())));
-        remoteCalls().ifPresent(count -> assertEquals(0, count));
-    }
-
-    @Test
-    void placeOrderWithNullRefThrowsBeforeAnyRemoteCall() {
-        // given
-        SupplierProvider provider = providerFullyAvailable();
-
-        // when / then
-        assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(purchaseRequest(null, sampleLines())));
-        remoteCalls().ifPresent(count -> assertEquals(0, count));
+    @Override
+    protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                              List<SupplierOrderLine> lines) {
+        return provider.placeOrder(purchaseRequest(clientOrderRef, lines));
     }
 
     @Test
     void placeOrderWithBlankExternalOrderIdThrows() {
         // given
         SupplierProvider provider = assumePresent(providerReturningBlankOrderId(), "a blank order id response");
-
-        // when / then
-        assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
-    }
-
-    @Test
-    void placeOrderFailureSurfacesOnlyAsSupplierOrderException() {
-        // given
-        SupplierProvider provider = assumePresent(providerWithFailingBackend(), "a failing backend");
 
         // when / then
         assertThrows(SupplierOrderException.class,
@@ -235,10 +176,5 @@ public abstract class SupplierOrderingContractTest {
 
     protected final SupplierPurchaseRequest purchaseRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
         return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId());
-    }
-
-    private static SupplierProvider assumePresent(Optional<SupplierProvider> provider, String scenario) {
-        assumeTrue(provider.isPresent(), "Adapter does not simulate " + scenario + " — hook not implemented");
-        return provider.orElseThrow();
     }
 }
