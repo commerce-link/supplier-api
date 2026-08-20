@@ -59,4 +59,14 @@ public interface SupplierProvider {
     default SupplierOrderResult placeOrder(SupplierPurchaseRequest request) {
         throw new UnsupportedOperationException("Ordering not supported by this supplier");
     }
+
+    /**
+     * Final order number for an order previously placed with the given client order ref, once
+     * the supplier considers it fully registered. Empty while the supplier is still processing
+     * the order (or when the supplier never reports a later number). Communication failures
+     * surface as {@link SupplierOrderException}.
+     */
+    default Optional<String> confirmedOrderId(String clientOrderRef) {
+        return Optional.empty();
+    }
 }
