@@ -1,5 +1,6 @@
 package pl.commercelink.inventory.supplier.api.ordering;
 
+import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -41,6 +42,39 @@ public abstract class IdempotentOrderPlacement<L, O> {
         }
     }
 
+    protected final SupplierOrderResult placeDropshipIdempotently(SupplierDropshipRequest request) {
+        String clientOrderRef = request.clientOrderRef();
+        if (clientOrderRef == null || clientOrderRef.isBlank()) {
+            throw new SupplierOrderException(
+                    "Missing clientOrderRef, refusing to place a non-idempotent " + supplierName() + " dropship order");
+        }
+        if (request.consignee() == null) {
+            throw new SupplierOrderException(
+                    "Missing consignee, refusing to place a " + supplierName() + " dropship order");
+        }
+        List<L> lines = wrapFailures("dropship line translation failed",
+                () -> request.lines().stream().map(this::toSupplierLine).toList());
+        // Separate |DS| namespace: a dropship retry must replay the dropship order, never contend
+        // with a regular purchase that happens to reuse the same ref.
+        synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|DS|" + clientOrderRef, key -> new Object())) {
+            Optional<O> existing = wrapFailures("dropship replay check failed",
+                    () -> findExistingDropshipOrder(clientOrderRef));
+            if (existing.isPresent()) {
+                return wrapFailures("dropship result mapping failed",
+                        () -> toDropshipResult(existing.orElseThrow(), request));
+            }
+            O order = wrapFailures("dropship order placement failed",
+                    () -> placeNewDropshipOrder(request, lines));
+            String externalOrderId = wrapFailures("dropship order id extraction failed",
+                    () -> order == null ? null : externalOrderId(order));
+            if (externalOrderId == null || externalOrderId.isBlank()) {
+                throw new SupplierOrderException(
+                        supplierName() + " returned no dropship order id for ref " + clientOrderRef);
+            }
+            return wrapFailures("dropship result mapping failed", () -> toDropshipResult(order, request));
+        }
+    }
+
     protected abstract String supplierName();
 
     protected abstract L toSupplierLine(SupplierOrderLine line);
@@ -52,6 +86,18 @@ public abstract class IdempotentOrderPlacement<L, O> {
     protected abstract String externalOrderId(O order);
 
     protected abstract SupplierOrderResult toResult(O order, SupplierPurchaseRequest request);
+
+    protected Optional<O> findExistingDropshipOrder(String clientOrderRef) {
+        return findExistingOrder(clientOrderRef);
+    }
+
+    protected O placeNewDropshipOrder(SupplierDropshipRequest request, List<L> lines) {
+        throw new UnsupportedOperationException(supplierName() + " does not support dropship placement");
+    }
+
+    protected SupplierOrderResult toDropshipResult(O order, SupplierDropshipRequest request) {
+        return toResult(order, new SupplierPurchaseRequest(request.clientOrderRef(), request.lines()));
+    }
 
     private <T> T wrapFailures(String activity, Supplier<T> action) {
         try {
