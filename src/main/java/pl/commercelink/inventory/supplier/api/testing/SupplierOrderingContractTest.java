@@ -157,6 +157,19 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     }
 
     @Test
+    void findPlacedOrderReturnsEmptyForUnknownRef() {
+        // given
+        SupplierProvider provider = providerFullyAvailable();
+        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+
+        // when
+        Optional<SupplierOrderResult> found = provider.findPlacedOrder(request);
+
+        // then
+        assertTrue(found.isEmpty());
+    }
+
+    @Test
     void checkAvailabilityFailureSurfacesOnlyAsSupplierOrderException() {
         // given
         SupplierProvider provider = assumePresent(providerWithFailingBackend(), "a failing backend");
