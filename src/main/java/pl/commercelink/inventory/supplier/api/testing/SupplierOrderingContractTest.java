@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierDeliveryAddress;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
+import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
@@ -16,6 +18,7 @@ import java.util.OptionalInt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -34,6 +37,15 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
     /** Provider short on at least one line of {@link #sampleLines()}. */
     protected abstract SupplierProvider providerWithShortage();
+
+    /**
+     * Provider whose transport fails while the placement request is in flight, after availability
+     * has already passed — the order may or may not have reached the supplier.
+     */
+    protected abstract SupplierProvider providerWithPlacementTransportFailure();
+
+    /** Provider whose supplier explicitly rejects the order (e.g. validation failure at the supplier). */
+    protected abstract SupplierProvider providerRejectingOrders();
 
     /** Provider whose backend answers a placement with a blank or missing order id. */
     protected Optional<SupplierProvider> providerReturningBlankOrderId() {
@@ -107,6 +119,41 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
         // when / then
         assertThrows(SupplierOrderException.class,
                 () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void placementTransportFailureSurfacesAsOutcomeUnknown() {
+        // given
+        SupplierProvider provider = providerWithPlacementTransportFailure();
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void explicitRejectionSurfacesAsRejected() {
+        // given
+        SupplierProvider provider = providerRejectingOrders();
+
+        // when / then
+        assertThrows(SupplierOrderRejectedException.class,
+                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void findPlacedOrderSeesPreviouslyPlacedOrder() {
+        // given
+        SupplierProvider provider = providerFullyAvailable();
+        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+
+        // when
+        SupplierOrderResult placed = provider.placeOrder(request);
+        Optional<SupplierOrderResult> found = provider.findPlacedOrder(request);
+
+        // then
+        assertTrue(found.isPresent());
+        assertEquals(placed.externalOrderId(), found.get().externalOrderId());
     }
 
     @Test
