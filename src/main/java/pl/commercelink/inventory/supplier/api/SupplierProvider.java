@@ -78,4 +78,23 @@ public interface SupplierProvider {
     default Optional<SupplierOrderResult> findPlacedOrder(SupplierPurchaseRequest request) {
         return Optional.empty();
     }
+
+    /**
+     * Whether the supplier can report the status and parcels of a placed order. Independent
+     * from ordering/dropshipping support; the application polls only providers answering
+     * {@code true}.
+     */
+    default boolean supportsOrderTracking() {
+        return false;
+    }
+
+    /**
+     * Read-only snapshot of an order previously placed at the supplier: its state and the
+     * parcels shipped so far. Empty when the supplier does not (yet) see the order. MUST never
+     * mutate anything remotely. Communication failures surface as {@link SupplierOrderException}.
+     * Delivered-to-customer dates are deliberately not part of the contract.
+     */
+    default Optional<SupplierOrderTracking> trackOrder(SupplierOrderLookup lookup) {
+        return Optional.empty();
+    }
 }
