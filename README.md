@@ -114,6 +114,32 @@ The contract is executable: adapters extend `api.testing.SupplierDropshipContrac
 base `api.testing.SupplierPlacementContractTest`, which enforces the shared placement rules
 (idempotency, all-or-nothing, ref guard, single failure type).
 
+## Order tracking contract
+
+Providers that return `true` from `supportsOrderTracking()` implement
+`trackOrder(SupplierOrderLookup)`: a **read-only** snapshot of an order previously placed at the
+supplier — `SupplierOrderTracking(state, parcels)` with `state` in
+`PROCESSING | PARTIALLY_SHIPPED | SHIPPED | CANCELLED` and one `SupplierParcel` per parcel handed
+to a carrier (`carrier` and `trackingNo` mandatory, `trackingUrl`/`shippedAt` optional, `lines`
+only when the supplier reports the split — an empty list means "everything still outstanding").
+
+Rules:
+
+1. **Read-only** — `trackOrder` never places, changes or cancels anything.
+2. **Lookup by whichever id the API indexes** — `SupplierOrderLookup` carries the supplier's
+   `externalOrderId` and our `clientOrderRef`; at least one is present (the record rejects an
+   empty lookup before any remote call).
+3. **Unknown → empty** — an order the supplier does not (yet) see yields `Optional.empty()`, not
+   an exception.
+4. **Single failure type** — communication failures surface only as `SupplierOrderException`.
+5. **No delivered date** — delivery to the end customer is out of scope; the application keeps it
+   manual.
+
+The contract is executable: adapters extend `api.testing.SupplierOrderTrackingContractTest`
+(required hooks `trackingProvider()`, `sampleLines()`, `uniqueClientOrderRef()`,
+`placeSampleOrder(provider, ref)`; optional `advanceToShipped(provider, ref, externalOrderId)`,
+`trackingProviderWithFailingBackend()`, `remotePlacedOrders()`).
+
 ### Ordering building blocks (`api.ordering` package)
 
 Common mechanics extracted from real adapters — the parts that repeat per supplier, deliberately
