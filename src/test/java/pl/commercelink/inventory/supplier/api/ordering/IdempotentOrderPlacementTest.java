@@ -5,6 +5,8 @@ import pl.commercelink.inventory.supplier.api.SupplierConsignee;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
+import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -209,17 +212,97 @@ class IdempotentOrderPlacementTest {
     }
 
     @Test
-    void propagatesSupplierOrderExceptionUnchanged() {
+    void placementRuntimeFailureSurfacesAsOutcomeUnknown() {
         // given
         TestPlacement placement = new TestPlacement();
-        placement.placementFailure = new SupplierOrderException("TestSupplier rejected purchase order: no stock");
+        IllegalStateException cause = new IllegalStateException("boom");
+        placement.placementFailure = cause;
+
+        // when
+        SupplierOrderOutcomeUnknownException exception = assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> placement.place(REQUEST));
+
+        // then
+        assertEquals(cause, exception.getCause());
+    }
+
+    @Test
+    void placementPlainSupplierOrderExceptionSurfacesAsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new SupplierOrderException("supplier said something odd");
+
+        // when
+        SupplierOrderOutcomeUnknownException exception = assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> placement.place(REQUEST));
+
+        // then
+        assertTrue(exception.getMessage().contains("supplier said something odd"));
+    }
+
+    @Test
+    void placementRejectionPassesThrough() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new SupplierOrderRejectedException("no stock");
+
+        // when / then
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.place(REQUEST));
+    }
+
+    @Test
+    void missingOrderIdSurfacesAsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placedOrder = " ";
+
+        // when
+        SupplierOrderOutcomeUnknownException exception = assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> placement.place(REQUEST));
+
+        // then
+        assertTrue(exception.getMessage().contains("returned no purchase order id"));
+    }
+
+    @Test
+    void replayCheckFailureStaysPlainSupplierOrderException() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.replayCheckFailure = new IllegalStateException("api down");
 
         // when
         SupplierOrderException exception = assertThrows(SupplierOrderException.class,
                 () -> placement.place(REQUEST));
 
         // then
-        assertEquals("TestSupplier rejected purchase order: no stock", exception.getMessage());
+        assertFalse(exception instanceof SupplierOrderRejectedException);
+        assertFalse(exception instanceof SupplierOrderOutcomeUnknownException);
+    }
+
+    @Test
+    void findPlacedOrderMapsExistingOrder() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-EXISTING";
+
+        // when
+        Optional<SupplierOrderResult> result = placement.findPlacedOrder(REQUEST);
+
+        // then
+        assertTrue(result.isPresent());
+        assertEquals("PO-EXISTING", result.orElseThrow().externalOrderId());
+    }
+
+    @Test
+    void findPlacedOrderReturnsEmptyForUnknownRef() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when
+        Optional<SupplierOrderResult> result = placement.findPlacedOrder(REQUEST);
+
+        // then
+        assertTrue(result.isEmpty());
     }
 
     @Test

@@ -3,6 +3,8 @@ package pl.commercelink.inventory.supplier.api.ordering;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
+import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
@@ -30,15 +32,15 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("order result mapping failed",
                         () -> toResult(existing.orElseThrow(), request));
             }
-            O order = wrapFailures("order placement failed",
+            O order = wrapPlacementFailures("order placement failed",
                     () -> placeNewOrder(request, lines));
-            String externalOrderId = wrapFailures("order id extraction failed",
+            String externalOrderId = wrapPlacementFailures("order id extraction failed",
                     () -> order == null ? null : externalOrderId(order));
             if (externalOrderId == null || externalOrderId.isBlank()) {
-                throw new SupplierOrderException(
+                throw new SupplierOrderOutcomeUnknownException(
                         supplierName() + " returned no purchase order id for ref " + clientOrderRef);
             }
-            return wrapFailures("order result mapping failed", () -> toResult(order, request));
+            return wrapPlacementFailures("order result mapping failed", () -> toResult(order, request));
         }
     }
 
@@ -75,6 +77,19 @@ public abstract class IdempotentOrderPlacement<L, O> {
         }
     }
 
+    /**
+     * Read-only probe: the order previously placed with {@code request.clientOrderRef()},
+     * if this supplier reports one. MUST never place a new order.
+     */
+    public Optional<SupplierOrderResult> findPlacedOrder(SupplierPurchaseRequest request) {
+        String clientOrderRef = request.clientOrderRef();
+        if (clientOrderRef == null || clientOrderRef.isBlank()) {
+            return Optional.empty();
+        }
+        return wrapFailures("placed order lookup failed",
+                () -> findExistingOrder(clientOrderRef).map(order -> toResult(order, request)));
+    }
+
     protected abstract String supplierName();
 
     protected abstract L toSupplierLine(SupplierOrderLine line);
@@ -106,6 +121,21 @@ public abstract class IdempotentOrderPlacement<L, O> {
             throw e;
         } catch (RuntimeException e) {
             throw new SupplierOrderException(supplierName() + " " + activity, e);
+        }
+    }
+
+    private <T> T wrapPlacementFailures(String activity, Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (SupplierOrderRejectedException | SupplierOrderOutcomeUnknownException e) {
+            throw e;
+        } catch (SupplierOrderException e) {
+            // The request may have left the process: without an explicit rejection the
+            // supplier might have registered the order, so the outcome is unknown.
+            throw new SupplierOrderOutcomeUnknownException(
+                    supplierName() + " " + activity + ": " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new SupplierOrderOutcomeUnknownException(supplierName() + " " + activity, e);
         }
     }
 }

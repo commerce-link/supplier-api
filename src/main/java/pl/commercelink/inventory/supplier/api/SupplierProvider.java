@@ -69,4 +69,13 @@ public interface SupplierProvider {
     default Optional<String> confirmedOrderId(String clientOrderRef) {
         return Optional.empty();
     }
+
+    /**
+     * Read-only probe: the order previously placed with {@code request.clientOrderRef()},
+     * if the supplier reports one. MUST never place a new order. Empty when no matching
+     * order is visible; communication failures surface as {@link SupplierOrderException}.
+     */
+    default Optional<SupplierOrderResult> findPlacedOrder(SupplierPurchaseRequest request) {
+        return Optional.empty();
+    }
 }
