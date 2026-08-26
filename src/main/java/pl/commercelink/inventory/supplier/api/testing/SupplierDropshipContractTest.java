@@ -120,7 +120,7 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
     @Override
     protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
                                               List<SupplierOrderLine> lines) {
-        return provider.placeDropshipOrder(dropshipRequest(clientOrderRef, lines));
+        return provider.placeDropshipOrder(dropshipRequest(provider, clientOrderRef, lines));
     }
 
     @Override
@@ -149,7 +149,7 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         // when / then
         assertFalse(defaults.supportsDropshipping());
         assertThrows(UnsupportedOperationException.class, () -> defaults.placeDropshipOrder(
-                dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+                dropshipRequest(defaults, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -160,7 +160,7 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderOutcomeUnknownException.class,
-                () -> provider.placeDropshipOrder(dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeDropshipOrder(dropshipRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -170,7 +170,7 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderRejectedException.class,
-                () -> provider.placeDropshipOrder(dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeDropshipOrder(dropshipRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -208,9 +208,10 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
-    protected final SupplierDropshipRequest dropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
+    protected final SupplierDropshipRequest dropshipRequest(SupplierProvider provider, String clientOrderRef,
+                                                             List<SupplierOrderLine> lines) {
         return new SupplierDropshipRequest(clientOrderRef, lines, sampleConsignee(), null, null,
-                sampleOptions(dropshipProvider(), SupplierOrderOptionsContext.dropship(null)));
+                sampleOptions(provider, SupplierOrderOptionsContext.dropship(null)));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package pl.commercelink.inventory.supplier.api.testing;
 
+import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.FeedData;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
@@ -22,6 +23,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest {
 
     enum Mode { OK, SHORTAGE, FAILING, TRANSPORT_FAILURE, REJECTING }
@@ -43,8 +46,13 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
         @Override public boolean supportsPickupPointDropship() { return pickupPoints; }
         @Override public List<SupplierOrderOption> orderOptions(SupplierOrderOptionsContext context) {
             // Real adapters fetch this from the supplier, so count it as a remote call here too —
-            // that is what proves the ref/consignee/pickup guard tests never consult it.
-            remote();
+            // that is what proves the ref/consignee/pickup guard tests never consult it. Per the
+            // interface contract, a failure here must surface only as SupplierOrderException.
+            try {
+                remote();
+            } catch (RuntimeException e) {
+                throw new SupplierOrderException("InMemory order options failed", e);
+            }
             return List.of(new SupplierOrderOption("lane", "Lane", List.of(
                     new SupplierOrderOptionChoice("fast", "Fast", null),
                     new SupplierOrderOptionChoice("slow", "Slow", null)), "fast", true));
@@ -90,19 +98,41 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
     }
 
     private InMemoryProvider last;
+    private int hookInvocations;
 
     /**
      * Reuses the current provider when asked for the same (mode, pickupPoints) combination it
      * already holds, so a helper that looks up sample options via a hook (e.g. {@code
      * dropshipRequest}) does not silently swap out the provider instance a test is placing an
-     * order against.
+     * order against. This memoization is now belt-and-braces: the kit no longer re-invokes the
+     * provider hook to build a request (see {@link #placingAnOrderInvokesTheProviderHookExactlyOnce}),
+     * but it is kept because it is harmless and guards against a future regression of the same kind.
      */
     private InMemoryProvider provider(Mode mode, boolean pickupPoints) {
+        hookInvocations++;
         if (last != null && last.mode == mode && last.pickupPoints == pickupPoints) {
             return last;
         }
         last = new InMemoryProvider(mode, pickupPoints);
         return last;
+    }
+
+    /**
+     * Guards against the request-builder helpers ({@code dropshipRequest}) re-invoking the
+     * provider hook to compute sample options: adapters whose hook builds a fresh fake per call
+     * (e.g. Elko) would then fail idempotency tests even though no test code calls the hook twice.
+     */
+    @Test
+    void placingAnOrderInvokesTheProviderHookExactlyOnce() {
+        // given
+        hookInvocations = 0;
+
+        // when
+        SupplierProvider provider = dropshipProvider();
+        place(provider, uniqueClientOrderRef(), sampleLines());
+
+        // then
+        assertEquals(1, hookInvocations);
     }
 
     @Override protected SupplierProvider dropshipProvider() { return provider(Mode.OK, true); }

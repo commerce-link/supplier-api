@@ -112,7 +112,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     @Override
     protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
                                               List<SupplierOrderLine> lines) {
-        return provider.placeOrder(purchaseRequest(clientOrderRef, lines));
+        return provider.placeOrder(purchaseRequest(provider, clientOrderRef, lines));
     }
 
     @Override
@@ -128,7 +128,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -138,7 +138,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderOutcomeUnknownException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -148,14 +148,14 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderRejectedException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
     void findPlacedOrderSeesPreviouslyPlacedOrder() {
         // given
         SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(provider, uniqueClientOrderRef(), sampleLines());
 
         // when
         SupplierOrderResult placed = provider.placeOrder(request);
@@ -170,7 +170,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     void findPlacedOrderReturnsEmptyForUnknownRef() {
         // given
         SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(provider, uniqueClientOrderRef(), sampleLines());
 
         // when
         Optional<SupplierOrderResult> found = provider.findPlacedOrder(request);
@@ -244,9 +244,10 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
         return provider;
     }
 
-    protected final SupplierPurchaseRequest purchaseRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
+    protected final SupplierPurchaseRequest purchaseRequest(SupplierProvider provider, String clientOrderRef,
+                                                            List<SupplierOrderLine> lines) {
         return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId(),
-                sampleOptions(providerFullyAvailable(), SupplierOrderOptionsContext.warehouse()));
+                sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
     }
 
     @Test
@@ -288,7 +289,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
         assumeOrderOptions();
         SupplierProvider provider = providerFullyAvailable();
 
-        SupplierOrderResult result = provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines()));
+        SupplierOrderResult result = provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines()));
 
         assertFalse(result.externalOrderId().isBlank());
     }
