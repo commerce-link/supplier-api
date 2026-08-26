@@ -6,6 +6,7 @@ import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
+import pl.commercelink.inventory.supplier.api.SupplierProvider;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
 import java.util.List;
@@ -54,6 +55,12 @@ public abstract class IdempotentOrderPlacement<L, O> {
             throw new SupplierOrderException(
                     "Missing consignee, refusing to place a " + supplierName() + " dropship order");
         }
+        if (request.pickupPoint() != null && !acceptsPickupPoint()) {
+            // Never redirect a parcel the customer wants at a pickup point to the street address.
+            throw new SupplierOrderRejectedException(supplierName()
+                    + " does not deliver dropship orders to carrier pickup points (requested "
+                    + request.pickupPoint().carrier() + " " + request.pickupPoint().code() + ")");
+        }
         List<L> lines = wrapFailures("dropship line translation failed",
                 () -> request.lines().stream().map(this::toSupplierLine).toList());
         // Separate |DS| namespace: a dropship retry must replay the dropship order, never contend
@@ -65,15 +72,15 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("dropship result mapping failed",
                         () -> toDropshipResult(existing.orElseThrow(), request));
             }
-            O order = wrapFailures("dropship order placement failed",
+            O order = wrapPlacementFailures("dropship order placement failed",
                     () -> placeNewDropshipOrder(request, lines));
-            String externalOrderId = wrapFailures("dropship order id extraction failed",
+            String externalOrderId = wrapPlacementFailures("dropship order id extraction failed",
                     () -> order == null ? null : externalOrderId(order));
             if (externalOrderId == null || externalOrderId.isBlank()) {
-                throw new SupplierOrderException(
+                throw new SupplierOrderOutcomeUnknownException(
                         supplierName() + " returned no dropship order id for ref " + clientOrderRef);
             }
-            return wrapFailures("dropship result mapping failed", () -> toDropshipResult(order, request));
+            return wrapPlacementFailures("dropship result mapping failed", () -> toDropshipResult(order, request));
         }
     }
 
@@ -86,8 +93,12 @@ public abstract class IdempotentOrderPlacement<L, O> {
         if (clientOrderRef == null || clientOrderRef.isBlank()) {
             return Optional.empty();
         }
+        // Dropship orders may live in a different supplier view (e.g. Incom's DR list), so the
+        // probe checks both before reporting "not found".
         return wrapFailures("placed order lookup failed",
-                () -> findExistingOrder(clientOrderRef).map(order -> toResult(order, request)));
+                () -> findExistingOrder(clientOrderRef)
+                        .or(() -> findExistingDropshipOrder(clientOrderRef))
+                        .map(order -> toResult(order, request)));
     }
 
     protected abstract String supplierName();
@@ -104,6 +115,11 @@ public abstract class IdempotentOrderPlacement<L, O> {
 
     protected Optional<O> findExistingDropshipOrder(String clientOrderRef) {
         return findExistingOrder(clientOrderRef);
+    }
+
+    /** Whether {@link #placeNewDropshipOrder} honours a pickup point; providers answer via the SPI flag. */
+    protected boolean acceptsPickupPoint() {
+        return this instanceof SupplierProvider provider && provider.supportsPickupPointDropship();
     }
 
     protected O placeNewDropshipOrder(SupplierDropshipRequest request, List<L> lines) {

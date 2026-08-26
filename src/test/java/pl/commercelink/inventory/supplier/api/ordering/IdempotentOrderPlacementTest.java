@@ -8,6 +8,7 @@ import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
+import pl.commercelink.inventory.supplier.api.SupplierPickupPoint;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
 import java.util.ArrayList;
@@ -40,6 +41,8 @@ class IdempotentOrderPlacementTest {
         private RuntimeException placementFailure;
         private SupplierPurchaseRequest placedWith;
         private SupplierDropshipRequest dropshipPlacedWith;
+        private boolean acceptsPickupPoint;
+        private String existingDropshipOrder;
 
         SupplierOrderResult place(SupplierPurchaseRequest request) {
             return placeIdempotently(request);
@@ -66,6 +69,18 @@ class IdempotentOrderPlacementTest {
             callLog.add("findExisting");
             if (replayCheckFailure != null) throw replayCheckFailure;
             return Optional.ofNullable(existingOrder);
+        }
+
+        @Override
+        protected boolean acceptsPickupPoint() {
+            return acceptsPickupPoint;
+        }
+
+        @Override
+        protected Optional<String> findExistingDropshipOrder(String clientOrderRef) {
+            callLog.add("findExistingDropship");
+            if (replayCheckFailure != null) throw replayCheckFailure;
+            return Optional.ofNullable(existingDropshipOrder != null ? existingDropshipOrder : existingOrder);
         }
 
         @Override
@@ -315,7 +330,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-1", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "placeDropship", "toResult:PO-1"), placement.callLog);
+        assertEquals(List.of("translate", "findExistingDropship", "placeDropship", "toResult:PO-1"), placement.callLog);
         assertEquals(CONSIGNEE, placement.dropshipPlacedWith.consignee());
     }
 
@@ -330,7 +345,105 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "toResult:PO-EXISTING"), placement.callLog);
+        assertEquals(List.of("translate", "findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
+    }
+
+    private static final SupplierPickupPoint PICKUP_POINT =
+            new SupplierPickupPoint("InPost", "WAW04A", null, null, null, null);
+    private static final SupplierDropshipRequest PICKUP_REQUEST = new SupplierDropshipRequest(
+            "ref-ds-pp", REQUEST.lines(), CONSIGNEE, null, PICKUP_POINT);
+
+    @Test
+    void pickupPointRequestIsRejectedBeforeAnyHookWhenUnsupported() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when / then
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.placeDropship(PICKUP_REQUEST));
+        assertTrue(placement.callLog.isEmpty());
+    }
+
+    @Test
+    void pickupPointRequestReachesPlacementWhenSupported() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.acceptsPickupPoint = true;
+
+        // when
+        SupplierOrderResult result = placement.placeDropship(PICKUP_REQUEST);
+
+        // then
+        assertEquals("PO-1", result.externalOrderId());
+        assertEquals(PICKUP_POINT, placement.dropshipPlacedWith.pickupPoint());
+    }
+
+    @Test
+    void dropshipPlacementRuntimeFailureSurfacesAsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new IllegalStateException("connection reset");
+
+        // when / then
+        SupplierOrderOutcomeUnknownException exception = assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> placement.placeDropship(DROPSHIP_REQUEST));
+        assertTrue(exception.getMessage().contains("dropship order placement failed"));
+    }
+
+    @Test
+    void dropshipPlacementPlainSupplierOrderExceptionSurfacesAsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new SupplierOrderException("SOAP timeout");
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class, () -> placement.placeDropship(DROPSHIP_REQUEST));
+    }
+
+    @Test
+    void dropshipPlacementRejectionPassesThrough() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new SupplierOrderRejectedException("no stock");
+
+        // when / then
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.placeDropship(DROPSHIP_REQUEST));
+    }
+
+    @Test
+    void missingDropshipOrderIdSurfacesAsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placedOrder = " ";
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class, () -> placement.placeDropship(DROPSHIP_REQUEST));
+    }
+
+    @Test
+    void dropshipReplayCheckFailureStaysPlainSupplierOrderException() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.replayCheckFailure = new IllegalStateException("list unavailable");
+
+        // when / then
+        SupplierOrderException exception = assertThrows(SupplierOrderException.class,
+                () -> placement.placeDropship(DROPSHIP_REQUEST));
+        assertFalse(exception instanceof SupplierOrderRejectedException);
+        assertFalse(exception instanceof SupplierOrderOutcomeUnknownException);
+    }
+
+    @Test
+    void findPlacedOrderFallsBackToDropshipLookup() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingDropshipOrder = "DS-77";
+
+        // when
+        Optional<SupplierOrderResult> result = placement.findPlacedOrder(REQUEST);
+
+        // then
+        assertEquals("DS-77", result.orElseThrow().externalOrderId());
+        assertEquals(List.of("findExisting", "findExistingDropship", "toResult:DS-77"), placement.callLog);
     }
 
     @Test
