@@ -3,15 +3,21 @@ package pl.commercelink.inventory.supplier.api;
 import java.util.List;
 
 /**
- * A dropship order: goods go straight from the supplier to the {@link SupplierConsignee}. The
- * {@code clientOrderRef} carries the same idempotency contract as regular purchases; providers
- * may forward {@code deliveryInstructions} to the supplier when the API has such a field.
+ * Dropship order: lines shipped by the supplier straight to {@code consignee}. When
+ * {@code pickupPoint} is present the parcel goes to that carrier point instead of the consignee's
+ * street address; the consignee still carries the recipient's name and contact data.
  */
 public record SupplierDropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines,
-                                      SupplierConsignee consignee, String deliveryInstructions) {
+                                      SupplierConsignee consignee, String deliveryInstructions,
+                                      SupplierPickupPoint pickupPoint) {
 
     public SupplierDropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines,
                                    SupplierConsignee consignee) {
-        this(clientOrderRef, lines, consignee, null);
+        this(clientOrderRef, lines, consignee, null, null);
+    }
+
+    public SupplierDropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines,
+                                   SupplierConsignee consignee, String deliveryInstructions) {
+        this(clientOrderRef, lines, consignee, deliveryInstructions, null);
     }
 }

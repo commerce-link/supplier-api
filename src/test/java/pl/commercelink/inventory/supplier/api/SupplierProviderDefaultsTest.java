@@ -35,4 +35,13 @@ class SupplierProviderDefaultsTest {
         // when / then
         assertTrue(provider.trackOrder(new SupplierOrderLookup("SP-1", "ref-1")).isEmpty());
     }
+
+    @Test
+    void pickupPointDropshipIsUnsupportedByDefault() {
+        // given
+        SupplierProvider provider = () -> Optional.empty();
+
+        // when / then
+        assertFalse(provider.supportsPickupPointDropship());
+    }
 }

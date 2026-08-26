@@ -52,6 +52,15 @@ public interface SupplierProvider {
         throw new UnsupportedOperationException("Dropshipping not supported by this supplier");
     }
 
+    /**
+     * Whether {@link #placeDropshipOrder} honours {@link SupplierDropshipRequest#pickupPoint()}.
+     * A request carrying a pickup point sent to a provider answering {@code false} is rejected
+     * before any remote call — the parcel is never silently redirected to the street address.
+     */
+    default boolean supportsPickupPointDropship() {
+        return false;
+    }
+
     default List<SupplierQuote> checkAvailability(List<SupplierOrderLine> lines) {
         throw new UnsupportedOperationException("Ordering not supported by this supplier");
     }
