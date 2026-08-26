@@ -44,4 +44,14 @@ class SupplierProviderDefaultsTest {
         // when / then
         assertFalse(provider.supportsPickupPointDropship());
     }
+
+    @Test
+    void providersDeclareNoOrderOptionsByDefault() {
+        // given
+        SupplierProvider provider = () -> Optional.empty();
+
+        // when / then
+        assertTrue(provider.orderOptions(SupplierOrderOptionsContext.warehouse()).isEmpty());
+        assertTrue(provider.orderOptions(SupplierOrderOptionsContext.dropship(null)).isEmpty());
+    }
 }

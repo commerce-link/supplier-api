@@ -3,9 +3,11 @@ package pl.commercelink.inventory.supplier.api;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SupplierDropshipRequestTest {
 
@@ -36,5 +38,16 @@ class SupplierDropshipRequestTest {
 
         // then
         assertEquals(point, request.pickupPoint());
+    }
+
+    @Test
+    void optionsDefaultToEmptyAndAreUnmodifiable() {
+        SupplierDropshipRequest plain = new SupplierDropshipRequest("ref", LINES, CONSIGNEE);
+        SupplierDropshipRequest withOptions = new SupplierDropshipRequest("ref", LINES, CONSIGNEE, null, null,
+                Map.of("paymentMethod", "1.Przelew"));
+
+        assertEquals(Map.of(), plain.options());
+        assertEquals("1.Przelew", withOptions.options().get("paymentMethod"));
+        assertThrows(UnsupportedOperationException.class, () -> withOptions.options().put("a", "b"));
     }
 }

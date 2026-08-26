@@ -33,6 +33,19 @@ public interface SupplierProvider {
     }
 
     /**
+     * Decisions the supplier needs per order (e.g. delivery method), with the values it accepts.
+     * The application renders them before the purchase is confirmed and sends the chosen values in
+     * {@link SupplierPurchaseRequest#options()} / {@link SupplierDropshipRequest#options()}. May be
+     * called several times per order (render, validate, approve) and must not create anything
+     * remotely; failures surface as {@link SupplierOrderException} and block ordering. Adapters
+     * validate the received values themselves and reject a missing required option or an unknown
+     * value with {@link SupplierOrderRejectedException} before anything exists at the supplier.
+     */
+    default List<SupplierOrderOption> orderOptions(SupplierOrderOptionsContext context) {
+        return List.of();
+    }
+
+    /**
      * Whether the supplier can ship an order directly to the end customer (dropshipping).
      * Independent from {@link #supportsOrdering()}: real suppliers expose dropshipping as a
      * different endpoint with its own contract (e.g. ELKO {@code /Orders/EndUser}) and it may

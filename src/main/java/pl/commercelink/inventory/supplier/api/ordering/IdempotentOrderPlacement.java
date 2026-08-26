@@ -133,7 +133,7 @@ public abstract class IdempotentOrderPlacement<L, O> {
     }
 
     protected SupplierOrderResult toDropshipResult(O order, SupplierDropshipRequest request) {
-        return toResult(order, new SupplierPurchaseRequest(request.clientOrderRef(), request.lines()));
+        return toResult(order, new SupplierPurchaseRequest(request.clientOrderRef(), request.lines(), null, request.options()));
     }
 
     private <T> T wrapFailures(String activity, Supplier<T> action) {
