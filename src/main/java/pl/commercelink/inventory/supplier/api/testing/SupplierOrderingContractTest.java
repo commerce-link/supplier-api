@@ -115,6 +115,12 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
         return provider.placeOrder(purchaseRequest(clientOrderRef, lines));
     }
 
+    @Override
+    protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                              List<SupplierOrderLine> lines, Map<String, String> options) {
+        return provider.placeOrder(new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId(), options));
+    }
+
     @Test
     void placeOrderWithBlankExternalOrderIdThrows() {
         // given

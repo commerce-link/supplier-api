@@ -123,6 +123,13 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         return provider.placeDropshipOrder(dropshipRequest(clientOrderRef, lines));
     }
 
+    @Override
+    protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                              List<SupplierOrderLine> lines, Map<String, String> options) {
+        return provider.placeDropshipOrder(
+                new SupplierDropshipRequest(clientOrderRef, lines, sampleConsignee(), null, null, options));
+    }
+
     @Test
     void nullConsigneeThrowsBeforeAnyRemoteCall() {
         // given

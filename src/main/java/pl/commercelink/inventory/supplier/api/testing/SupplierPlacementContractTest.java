@@ -51,6 +51,14 @@ public abstract class SupplierPlacementContractTest {
     protected abstract SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
                                                  List<SupplierOrderLine> lines);
 
+    /**
+     * Places an order for the given client order reference, lines, and options, without
+     * consulting {@link SupplierProvider#orderOptions(SupplierOrderOptionsContext)} — used by
+     * tests that must observe zero remote calls, since the option lookup is itself remote.
+     */
+    protected abstract SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                                 List<SupplierOrderLine> lines, Map<String, String> options);
+
     /** Provider whose backend fails every remote call with a raw transport error. */
     protected Optional<SupplierProvider> placementProviderWithFailingBackend() {
         return Optional.empty();
@@ -136,8 +144,10 @@ public abstract class SupplierPlacementContractTest {
         SupplierProvider provider = placementProvider();
 
         // when / then
+        // Option lookup (sampleOptions -> orderOptions) is itself a remote call, so it must not
+        // run here: pass an empty options map so the ref guard is the first thing that fires.
         assertThrows(SupplierOrderException.class,
-                () -> place(provider, " ", sampleLines()));
+                () -> place(provider, " ", sampleLines(), Map.of()));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
@@ -147,8 +157,10 @@ public abstract class SupplierPlacementContractTest {
         SupplierProvider provider = placementProvider();
 
         // when / then
+        // Option lookup (sampleOptions -> orderOptions) is itself a remote call, so it must not
+        // run here: pass an empty options map so the ref guard is the first thing that fires.
         assertThrows(SupplierOrderException.class,
-                () -> place(provider, null, sampleLines()));
+                () -> place(provider, null, sampleLines(), Map.of()));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 

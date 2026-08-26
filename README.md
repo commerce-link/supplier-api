@@ -46,7 +46,8 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
 3. **Order id required** — a blank or missing `externalOrderId` in the supplier response raises
    `SupplierOrderException` (an order without a traceable id cannot be reconciled).
 4. **Ref guard** — a blank or missing `clientOrderRef` raises `SupplierOrderException` before any
-   remote call (a blank ref would silently disable idempotency).
+   remote call (a blank ref would silently disable idempotency), including before the request's
+   options are looked up, since `orderOptions` (rule 13) is itself a remote call.
 5. **Single failure type** — all failures surface only as `SupplierOrderException`, never as raw
    HTTP or client exceptions; the application's error handling keys on the SPI type.
 6. **Fail closed** — `checkAvailability` quotes quantity 0 for an unknown product or a missing

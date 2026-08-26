@@ -42,6 +42,9 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
         @Override public boolean supportsDropshipping() { return true; }
         @Override public boolean supportsPickupPointDropship() { return pickupPoints; }
         @Override public List<SupplierOrderOption> orderOptions(SupplierOrderOptionsContext context) {
+            // Real adapters fetch this from the supplier, so count it as a remote call here too —
+            // that is what proves the ref/consignee/pickup guard tests never consult it.
+            remote();
             return List.of(new SupplierOrderOption("lane", "Lane", List.of(
                     new SupplierOrderOptionChoice("fast", "Fast", null),
                     new SupplierOrderOptionChoice("slow", "Slow", null)), "fast", true));
