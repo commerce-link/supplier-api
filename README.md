@@ -107,12 +107,27 @@ closed, missing sku fails closed). Instead of rule 8, dropshipping adds:
    an email — carriers notify the end customer directly, so incomplete contact data would
    surface as a delivery failure days later.
 
+9. **Outcome classes** — a dropship placement follows the same failure classes as `placeOrder`:
+   a definite pre-send failure (availability, basket, address creation) raises
+   `SupplierOrderRejectedException`; a failure once the placement request may have left the
+   process raises `SupplierOrderOutcomeUnknownException` (the engine does this for any other
+   exception thrown by `placeNewDropshipOrder`). `findPlacedOrder` probes the dropship lookup
+   too, so reconcile finds dropship orders living in a separate supplier view.
+10. **Pickup points** — `SupplierDropshipRequest.pickupPoint` (`SupplierPickupPoint`: canonical
+   carrier name + point code, optional address) asks the supplier to deliver to a carrier point.
+   Providers declare support with `supportsPickupPointDropship()` (default `false`); a request
+   carrying a pickup point to a provider without support raises `SupplierOrderRejectedException`
+   before any remote call — the parcel is never redirected to the street address. The consignee
+   stays mandatory (recipient name and contact data for the carrier notification).
+
 The contract is executable: adapters extend `api.testing.SupplierDropshipContractTest`
 (required hooks `dropshipProvider()`, `dropshipProviderWithShortage()`, `sampleLines()`,
 `uniqueClientOrderRef()`; optional `sampleConsignee()`, `dropshipProviderWithFailingBackend()`,
-`remoteDropshipOrdersPlaced()`, `remoteCalls()`). Like the ordering kit, it extends the common
-base `api.testing.SupplierPlacementContractTest`, which enforces the shared placement rules
-(idempotency, all-or-nothing, ref guard, single failure type).
+`remoteDropshipOrdersPlaced()`, `remoteCalls()`,
+`dropshipProviderWithPlacementTransportFailure()`, `dropshipProviderRejectingOrders()`,
+`samplePickupPoint()`, `dropshipProviderWithoutPickupPoints()`). Like the ordering kit, it
+extends the common base `api.testing.SupplierPlacementContractTest`, which enforces the shared
+placement rules (idempotency, all-or-nothing, ref guard, single failure type).
 
 ## Order tracking contract
 

@@ -6,7 +6,10 @@ import pl.commercelink.inventory.supplier.api.SupplierConsignee;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
+import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
+import pl.commercelink.inventory.supplier.api.SupplierPickupPoint;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
 
 import java.util.List;
@@ -16,6 +19,8 @@ import java.util.OptionalInt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Executable dropship contract for {@link SupplierProvider} implementations; every adapter that
@@ -47,6 +52,26 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
     /** Number of dropship orders actually placed at the (fake) supplier since the test started, if observable. */
     protected OptionalInt remoteDropshipOrdersPlaced() {
         return OptionalInt.empty();
+    }
+
+    /** Provider whose dropship placement call dies mid-flight (order may or may not exist). */
+    protected Optional<SupplierProvider> dropshipProviderWithPlacementTransportFailure() {
+        return Optional.empty();
+    }
+
+    /** Provider whose backend definitively rejects the dropship order before it exists. */
+    protected Optional<SupplierProvider> dropshipProviderRejectingOrders() {
+        return Optional.empty();
+    }
+
+    /** A pickup point {@link #dropshipProvider()} accepts; empty when the adapter has no pickup support. */
+    protected Optional<SupplierPickupPoint> samplePickupPoint() {
+        return Optional.empty();
+    }
+
+    /** Provider of the same adapter that does NOT support pickup points, for the guard test. */
+    protected Optional<SupplierProvider> dropshipProviderWithoutPickupPoints() {
+        return Optional.empty();
     }
 
     @Override
@@ -100,6 +125,60 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         assertFalse(defaults.supportsDropshipping());
         assertThrows(UnsupportedOperationException.class, () -> defaults.placeDropshipOrder(
                 dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void placementTransportFailureSurfacesAsOutcomeUnknown() {
+        // given
+        SupplierProvider provider = assumePresent(dropshipProviderWithPlacementTransportFailure(),
+                "a placement transport failure");
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> provider.placeDropshipOrder(dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void explicitRejectionSurfacesAsRejected() {
+        // given
+        SupplierProvider provider = assumePresent(dropshipProviderRejectingOrders(), "an explicit rejection");
+
+        // when / then
+        assertThrows(SupplierOrderRejectedException.class,
+                () -> provider.placeDropshipOrder(dropshipRequest(uniqueClientOrderRef(), sampleLines())));
+    }
+
+    @Test
+    void pickupPointOrderIsPlacedWhenSupported() {
+        // given
+        SupplierPickupPoint point = samplePickupPoint().orElse(null);
+        assumeTrue(point != null, "Adapter does not support pickup points — hook not implemented");
+        SupplierProvider provider = dropshipProvider();
+        String ref = uniqueClientOrderRef();
+
+        // when
+        SupplierOrderResult first = provider.placeDropshipOrder(
+                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
+        SupplierOrderResult retry = provider.placeDropshipOrder(
+                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
+
+        // then
+        assertTrue(provider.supportsPickupPointDropship());
+        assertFalse(first.externalOrderId().isBlank());
+        assertEquals(first.externalOrderId(), retry.externalOrderId());
+    }
+
+    @Test
+    void pickupPointRequestToProviderWithoutSupportIsRejectedBeforeAnyRemoteCall() {
+        // given
+        SupplierProvider provider = assumePresent(dropshipProviderWithoutPickupPoints(), "a provider without pickup points");
+        SupplierPickupPoint point = new SupplierPickupPoint("InPost", "WAW04A", null, null, null, null);
+
+        // when / then
+        assertFalse(provider.supportsPickupPointDropship());
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeDropshipOrder(
+                new SupplierDropshipRequest(uniqueClientOrderRef(), sampleLines(), sampleConsignee(), null, point)));
+        remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
     protected final SupplierDropshipRequest dropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
