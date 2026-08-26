@@ -59,6 +59,14 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
    `SupplierOrderException` when the list cannot be fetched or comes back empty, and when
    `placeOrder` is called without a `deliveryAddressId`. Shipping to a guessed address is worse
    than not ordering, so the application blocks the purchase instead of falling back.
+11. **Order options** — `orderOptions(context)` lists the decisions the supplier needs per order with
+    the values it accepts; the application asks the operator and sends the answers in
+    `SupplierPurchaseRequest.options` / `SupplierDropshipRequest.options`. Empty list = no decisions.
+12. **Options fail closed** — a missing required option or a value outside the declared choices is a
+    `SupplierOrderRejectedException` raised before anything is created at the supplier; adapters never
+    substitute the default silently (it only preselects the UI).
+13. **Options are read-only lookups** — `orderOptions` may be called repeatedly, must not create
+    anything remotely, and surfaces lookup failures as `SupplierOrderException`.
 
 ### Contract test kit
 

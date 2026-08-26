@@ -6,13 +6,17 @@ import pl.commercelink.inventory.supplier.api.SupplierConsignee;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierPickupPoint;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -169,13 +173,14 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         assumeTrue(point != null, "Adapter does not support pickup points — hook not implemented");
         SupplierProvider provider = dropshipProvider();
         String ref = uniqueClientOrderRef();
+        Map<String, String> options = sampleOptions(provider, SupplierOrderOptionsContext.dropship(point));
 
         // when
         SupplierOrderResult first = provider.placeDropshipOrder(
-                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
+                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point, options));
         remotePickupPointCode().ifPresent(code -> assertEquals(point.code(), code));
         SupplierOrderResult retry = provider.placeDropshipOrder(
-                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
+                new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point, options));
 
         // then
         assertTrue(provider.supportsPickupPointDropship());
@@ -197,6 +202,49 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
     }
 
     protected final SupplierDropshipRequest dropshipRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
-        return new SupplierDropshipRequest(clientOrderRef, lines, sampleConsignee());
+        return new SupplierDropshipRequest(clientOrderRef, lines, sampleConsignee(), null, null,
+                sampleOptions(dropshipProvider(), SupplierOrderOptionsContext.dropship(null)));
+    }
+
+    @Test
+    void dropshipOrderOptionsAreWellFormed() {
+        List<SupplierOrderOption> options = assumeDropshipOrderOptions();
+
+        assertEquals(options.size(), options.stream().map(SupplierOrderOption::key).distinct().count());
+        options.forEach(option -> assertFalse(option.choices().isEmpty(), option.key() + " has no choices"));
+    }
+
+    @Test
+    void placeDropshipWithoutRequiredOptionThrowsRejected() {
+        List<SupplierOrderOption> options = assumeDropshipOrderOptions();
+        SupplierOrderOption required = options.stream().filter(SupplierOrderOption::required).findFirst()
+                .orElseGet(() -> { assumeTrue(false, "No required option declared"); return null; });
+        SupplierProvider provider = dropshipProvider();
+        Map<String, String> chosen = new LinkedHashMap<>(
+                sampleOptions(provider, SupplierOrderOptionsContext.dropship(null)));
+        chosen.remove(required.key());
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeDropshipOrder(
+                new SupplierDropshipRequest(uniqueClientOrderRef(), sampleLines(), sampleConsignee(), null, null, chosen)));
+        remoteDropshipOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    @Test
+    void placeDropshipWithUnknownOptionValueThrowsRejected() {
+        List<SupplierOrderOption> options = assumeDropshipOrderOptions();
+        SupplierProvider provider = dropshipProvider();
+        Map<String, String> chosen = new LinkedHashMap<>(
+                sampleOptions(provider, SupplierOrderOptionsContext.dropship(null)));
+        chosen.put(options.getFirst().key(), "tck-unknown-value");
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeDropshipOrder(
+                new SupplierDropshipRequest(uniqueClientOrderRef(), sampleLines(), sampleConsignee(), null, null, chosen)));
+        remoteDropshipOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    private List<SupplierOrderOption> assumeDropshipOrderOptions() {
+        List<SupplierOrderOption> options = dropshipProvider().orderOptions(SupplierOrderOptionsContext.dropship(null));
+        assumeTrue(!options.isEmpty(), "Supplier declares no order options");
+        return options;
     }
 }

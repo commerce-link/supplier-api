@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierDeliveryAddress;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -11,7 +13,9 @@ import pl.commercelink.inventory.supplier.api.SupplierProvider;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 import pl.commercelink.inventory.supplier.api.SupplierQuote;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -235,6 +239,57 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     }
 
     protected final SupplierPurchaseRequest purchaseRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
-        return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId());
+        return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId(),
+                sampleOptions(providerFullyAvailable(), SupplierOrderOptionsContext.warehouse()));
+    }
+
+    @Test
+    void orderOptionsAreWellFormed() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+
+        assertEquals(options.size(), options.stream().map(SupplierOrderOption::key).distinct().count());
+        options.forEach(option -> assertFalse(option.choices().isEmpty(), option.key() + " has no choices"));
+    }
+
+    @Test
+    void placeOrderWithoutRequiredOptionThrowsRejected() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+        SupplierOrderOption required = options.stream().filter(SupplierOrderOption::required).findFirst()
+                .orElseGet(() -> { assumeTrue(false, "No required option declared"); return null; });
+        SupplierProvider provider = providerFullyAvailable();
+        Map<String, String> chosen = new LinkedHashMap<>(sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
+        chosen.remove(required.key());
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines(), deliveryAddressId(), chosen)));
+        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    @Test
+    void placeOrderWithUnknownOptionValueThrowsRejected() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+        SupplierProvider provider = providerFullyAvailable();
+        Map<String, String> chosen = new LinkedHashMap<>(sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
+        chosen.put(options.getFirst().key(), "tck-unknown-value");
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines(), deliveryAddressId(), chosen)));
+        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    @Test
+    void placeOrderWithSampleOptionsSucceeds() {
+        assumeOrderOptions();
+        SupplierProvider provider = providerFullyAvailable();
+
+        SupplierOrderResult result = provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines()));
+
+        assertFalse(result.externalOrderId().isBlank());
+    }
+
+    private List<SupplierOrderOption> assumeOrderOptions() {
+        List<SupplierOrderOption> options = providerFullyAvailable().orderOptions(SupplierOrderOptionsContext.warehouse());
+        assumeTrue(!options.isEmpty(), "Supplier declares no order options");
+        return options;
     }
 }

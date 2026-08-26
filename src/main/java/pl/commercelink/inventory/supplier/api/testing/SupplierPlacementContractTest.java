@@ -3,10 +3,14 @@ package pl.commercelink.inventory.supplier.api.testing;
 import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -60,6 +64,22 @@ public abstract class SupplierPlacementContractTest {
     /** Number of remote backend interactions since the test started, if observable. */
     protected OptionalInt remoteCalls() {
         return OptionalInt.empty();
+    }
+
+    /**
+     * Answers for every option the provider declares: its default, else the first choice. Adapters
+     * whose fixture needs different answers override this.
+     */
+    protected Map<String, String> sampleOptions(SupplierProvider provider, SupplierOrderOptionsContext context) {
+        Map<String, String> chosen = new LinkedHashMap<>();
+        for (SupplierOrderOption option : provider.orderOptions(context)) {
+            String value = option.defaultValue() != null ? option.defaultValue()
+                    : option.choices().isEmpty() ? null : option.choices().getFirst().value();
+            if (value != null) {
+                chosen.put(option.key(), value);
+            }
+        }
+        return chosen;
     }
 
     @Test

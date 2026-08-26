@@ -4,6 +4,9 @@ import pl.commercelink.inventory.supplier.api.FeedData;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionChoice;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -38,6 +41,11 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
         @Override public Optional<FeedData> download() { return Optional.empty(); }
         @Override public boolean supportsDropshipping() { return true; }
         @Override public boolean supportsPickupPointDropship() { return pickupPoints; }
+        @Override public List<SupplierOrderOption> orderOptions(SupplierOrderOptionsContext context) {
+            return List.of(new SupplierOrderOption("lane", "Lane", List.of(
+                    new SupplierOrderOptionChoice("fast", "Fast", null),
+                    new SupplierOrderOptionChoice("slow", "Slow", null)), "fast", true));
+        }
         @Override public SupplierOrderResult placeDropshipOrder(SupplierDropshipRequest request) {
             return placeDropshipIdempotently(request);
         }
@@ -48,9 +56,11 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
             return Optional.ofNullable(ordersByRef.get(clientOrderRef));
         }
         @Override protected String placeNewOrder(SupplierPurchaseRequest request, List<String> lines) {
+            validateLane(request.options());
             throw new UnsupportedOperationException();
         }
         @Override protected String placeNewDropshipOrder(SupplierDropshipRequest request, List<String> lines) {
+            validateLane(request.options());
             remote();
             lastPickupCode = request.pickupPoint() == null ? null : request.pickupPoint().code();
             switch (mode) {
@@ -68,11 +78,26 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
             remoteCalls++;
             if (mode == Mode.FAILING) throw new IllegalStateException("backend down");
         }
+        private void validateLane(Map<String, String> options) {
+            String lane = options.get("lane");
+            if (!"fast".equals(lane) && !"slow".equals(lane)) {
+                throw new SupplierOrderRejectedException("Unknown lane");
+            }
+        }
     }
 
     private InMemoryProvider last;
 
+    /**
+     * Reuses the current provider when asked for the same (mode, pickupPoints) combination it
+     * already holds, so a helper that looks up sample options via a hook (e.g. {@code
+     * dropshipRequest}) does not silently swap out the provider instance a test is placing an
+     * order against.
+     */
     private InMemoryProvider provider(Mode mode, boolean pickupPoints) {
+        if (last != null && last.mode == mode && last.pickupPoints == pickupPoints) {
+            return last;
+        }
         last = new InMemoryProvider(mode, pickupPoints);
         return last;
     }
