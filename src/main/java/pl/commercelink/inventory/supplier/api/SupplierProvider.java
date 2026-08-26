@@ -46,7 +46,9 @@ public interface SupplierProvider {
     /**
      * Places an order shipped by the supplier straight to {@link SupplierDropshipRequest#consignee()}.
      * Same rules as {@link #placeOrder}: idempotent per {@code clientOrderRef}, all-or-nothing on
-     * availability, failures surface only as {@link SupplierOrderException}.
+     * availability, failures surface only as {@link SupplierOrderException}. When
+     * {@link SupplierDropshipRequest#pickupPoint()} is present the parcel goes to that carrier
+     * point instead of the consignee's street address — see {@link #supportsPickupPointDropship()}.
      */
     default SupplierOrderResult placeDropshipOrder(SupplierDropshipRequest request) {
         throw new UnsupportedOperationException("Dropshipping not supported by this supplier");

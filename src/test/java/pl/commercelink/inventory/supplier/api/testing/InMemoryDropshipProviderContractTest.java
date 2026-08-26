@@ -28,6 +28,7 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
         final Mode mode;
         final boolean pickupPoints;
         int remoteCalls;
+        String lastPickupCode;
 
         InMemoryProvider(Mode mode, boolean pickupPoints) {
             this.mode = mode;
@@ -51,6 +52,7 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
         }
         @Override protected String placeNewDropshipOrder(SupplierDropshipRequest request, List<String> lines) {
             remote();
+            lastPickupCode = request.pickupPoint() == null ? null : request.pickupPoint().code();
             switch (mode) {
                 case SHORTAGE, REJECTING -> throw new SupplierOrderRejectedException("rejected");
                 case TRANSPORT_FAILURE -> throw new IllegalStateException("connection reset");
@@ -98,4 +100,5 @@ class InMemoryDropshipProviderContractTest extends SupplierDropshipContractTest 
     }
     @Override protected OptionalInt remoteDropshipOrdersPlaced() { return OptionalInt.of(last.ordersByRef.size()); }
     @Override protected OptionalInt remoteCalls() { return OptionalInt.of(last.remoteCalls); }
+    @Override protected Optional<String> remotePickupPointCode() { return Optional.ofNullable(last.lastPickupCode); }
 }

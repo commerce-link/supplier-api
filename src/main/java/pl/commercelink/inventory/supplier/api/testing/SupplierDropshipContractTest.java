@@ -27,8 +27,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * answers {@code supportsDropshipping() == true} ships a test class extending this kit. Rules
  * mirror the ordering contract (idempotency per ref, all-or-nothing, ref guard, failures only as
  * {@link SupplierOrderException}) plus the consignee requirement; the shared rules are enforced
- * by the common base {@link SupplierPlacementContractTest}. They are documented in the
- * supplier-api README under "Dropship contract".
+ * by the common base {@link SupplierPlacementContractTest}. Placement failures classify as either
+ * {@link SupplierOrderRejectedException} (definite pre-send rejection) or
+ * {@link SupplierOrderOutcomeUnknownException} (failure once the request may have left the
+ * process). Pickup-point rules: a request carrying {@link SupplierPickupPoint} is honoured only
+ * when {@link SupplierProvider#supportsPickupPointDropship()} answers {@code true}, is rejected
+ * with {@link SupplierOrderRejectedException} before any remote call otherwise, and an adapter
+ * that supports pickup points but cannot resolve the requested code never falls back to courier
+ * delivery. They are documented in the supplier-api README under "Dropship contract".
  */
 public abstract class SupplierDropshipContractTest extends SupplierPlacementContractTest {
 
@@ -71,6 +77,14 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
 
     /** Provider of the same adapter that does NOT support pickup points, for the guard test. */
     protected Optional<SupplierProvider> dropshipProviderWithoutPickupPoints() {
+        return Optional.empty();
+    }
+
+    /**
+     * The pickup-point code the (fake) supplier received for the most recent dropship order, if
+     * observable.
+     */
+    protected Optional<String> remotePickupPointCode() {
         return Optional.empty();
     }
 
@@ -159,6 +173,7 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         // when
         SupplierOrderResult first = provider.placeDropshipOrder(
                 new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
+        remotePickupPointCode().ifPresent(code -> assertEquals(point.code(), code));
         SupplierOrderResult retry = provider.placeDropshipOrder(
                 new SupplierDropshipRequest(ref, sampleLines(), sampleConsignee(), null, point));
 

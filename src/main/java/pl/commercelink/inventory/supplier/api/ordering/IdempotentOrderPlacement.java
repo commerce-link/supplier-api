@@ -117,7 +117,13 @@ public abstract class IdempotentOrderPlacement<L, O> {
         return findExistingOrder(clientOrderRef);
     }
 
-    /** Whether {@link #placeNewDropshipOrder} honours a pickup point; providers answer via the SPI flag. */
+    /**
+     * Whether {@link #placeNewDropshipOrder} honours a pickup point. Delegates to
+     * {@link SupplierProvider#supportsPickupPointDropship()} when this engine instance is itself
+     * the {@link SupplierProvider}; an engine subclass that is not (e.g. one composed into a
+     * separate provider class) is not an {@code instanceof SupplierProvider} here, so this
+     * answers {@code false} by default and such a subclass must override it explicitly.
+     */
     protected boolean acceptsPickupPoint() {
         return this instanceof SupplierProvider provider && provider.supportsPickupPointDropship();
     }

@@ -31,6 +31,11 @@ class IdempotentOrderPlacementTest {
     private static final SupplierDropshipRequest DROPSHIP_REQUEST = new SupplierDropshipRequest(
             "ref-ds-1", REQUEST.lines(), CONSIGNEE);
 
+    private static final SupplierPickupPoint PICKUP_POINT =
+            new SupplierPickupPoint("InPost", "WAW04A", null, null, null, null);
+    private static final SupplierDropshipRequest PICKUP_REQUEST = new SupplierDropshipRequest(
+            "ref-ds-pp", REQUEST.lines(), CONSIGNEE, null, PICKUP_POINT);
+
     private static class TestPlacement extends IdempotentOrderPlacement<String, String> {
 
         private final List<String> callLog = new ArrayList<>();
@@ -306,6 +311,9 @@ class IdempotentOrderPlacementTest {
         // then
         assertTrue(result.isPresent());
         assertEquals("PO-EXISTING", result.orElseThrow().externalOrderId());
+        // The regular lookup already found the order, so the dropship lookup is skipped
+        // (Optional#or short-circuits) — proves reconcile doesn't pay for a probe it doesn't need.
+        assertEquals(List.of("findExisting", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -347,11 +355,6 @@ class IdempotentOrderPlacementTest {
         assertEquals("PO-EXISTING", result.externalOrderId());
         assertEquals(List.of("translate", "findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
     }
-
-    private static final SupplierPickupPoint PICKUP_POINT =
-            new SupplierPickupPoint("InPost", "WAW04A", null, null, null, null);
-    private static final SupplierDropshipRequest PICKUP_REQUEST = new SupplierDropshipRequest(
-            "ref-ds-pp", REQUEST.lines(), CONSIGNEE, null, PICKUP_POINT);
 
     @Test
     void pickupPointRequestIsRejectedBeforeAnyHookWhenUnsupported() {

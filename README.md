@@ -117,17 +117,21 @@ closed, missing sku fails closed). Instead of rule 8, dropshipping adds:
    carrier name + point code, optional address) asks the supplier to deliver to a carrier point.
    Providers declare support with `supportsPickupPointDropship()` (default `false`); a request
    carrying a pickup point to a provider without support raises `SupplierOrderRejectedException`
-   before any remote call — the parcel is never redirected to the street address. The consignee
-   stays mandatory (recipient name and contact data for the carrier notification).
+   before any remote call — the parcel is never redirected to the street address. An adapter that
+   supports pickup points but cannot resolve the requested code against its own point list raises
+   `SupplierOrderRejectedException` before creating anything; it never falls back to courier
+   delivery. The consignee stays mandatory (recipient name and contact data for the carrier
+   notification).
 
 The contract is executable: adapters extend `api.testing.SupplierDropshipContractTest`
 (required hooks `dropshipProvider()`, `dropshipProviderWithShortage()`, `sampleLines()`,
 `uniqueClientOrderRef()`; optional `sampleConsignee()`, `dropshipProviderWithFailingBackend()`,
 `remoteDropshipOrdersPlaced()`, `remoteCalls()`,
 `dropshipProviderWithPlacementTransportFailure()`, `dropshipProviderRejectingOrders()`,
-`samplePickupPoint()`, `dropshipProviderWithoutPickupPoints()`). Like the ordering kit, it
-extends the common base `api.testing.SupplierPlacementContractTest`, which enforces the shared
-placement rules (idempotency, all-or-nothing, ref guard, single failure type).
+`samplePickupPoint()`, `dropshipProviderWithoutPickupPoints()`, `remotePickupPointCode()`). Like
+the ordering kit, it extends the common base `api.testing.SupplierPlacementContractTest`, which
+enforces the shared placement rules (idempotency, all-or-nothing, ref guard, single failure
+type).
 
 ## Order tracking contract
 
