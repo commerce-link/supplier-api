@@ -250,6 +250,17 @@ public abstract class SupplierDropshipContractTest extends SupplierPlacementCont
         remoteDropshipOrdersPlaced().ifPresent(count -> assertEquals(0, count));
     }
 
+    @Test
+    void placeDropshipWithSampleOptionsSucceeds() {
+        assumeDropshipOrderOptions();
+        SupplierProvider provider = dropshipProvider();
+
+        SupplierOrderResult result = provider.placeDropshipOrder(
+                dropshipRequest(provider, uniqueClientOrderRef(), sampleLines()));
+
+        assertFalse(result.externalOrderId().isBlank());
+    }
+
     private List<SupplierOrderOption> assumeDropshipOrderOptions() {
         List<SupplierOrderOption> options = dropshipProvider().orderOptions(SupplierOrderOptionsContext.dropship(null));
         assumeTrue(!options.isEmpty(), "Supplier declares no order options");

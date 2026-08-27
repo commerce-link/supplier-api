@@ -13,9 +13,11 @@ import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -112,8 +114,11 @@ class IdempotentOrderPlacementTest {
         @Override
         protected SupplierOrderResult toResult(String order, SupplierPurchaseRequest request) {
             callLog.add("toResult:" + order);
+            toResultCalledWith = request;
             return new SupplierOrderResult(order, 100.0, "PLN", List.of());
         }
+
+        private SupplierPurchaseRequest toResultCalledWith;
     }
 
     @Test
@@ -354,6 +359,37 @@ class IdempotentOrderPlacementTest {
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
         assertEquals(List.of("translate", "findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
+    }
+
+    @Test
+    void toDropshipResultForwardsOptionsAndClearsDeliveryAddressIdOnFreshPlacement() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        SupplierDropshipRequest request = new SupplierDropshipRequest(
+                "ref-ds-opts", REQUEST.lines(), CONSIGNEE, null, null, Map.of("shippingService", "express"));
+
+        // when
+        placement.placeDropship(request);
+
+        // then
+        assertEquals(Map.of("shippingService", "express"), placement.toResultCalledWith.options());
+        assertNull(placement.toResultCalledWith.deliveryAddressId());
+    }
+
+    @Test
+    void toDropshipResultForwardsOptionsAndClearsDeliveryAddressIdOnReplay() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-EXISTING";
+        SupplierDropshipRequest request = new SupplierDropshipRequest(
+                "ref-ds-opts-replay", REQUEST.lines(), CONSIGNEE, null, null, Map.of("shippingService", "standard"));
+
+        // when
+        placement.placeDropship(request);
+
+        // then
+        assertEquals(Map.of("shippingService", "standard"), placement.toResultCalledWith.options());
+        assertNull(placement.toResultCalledWith.deliveryAddressId());
     }
 
     @Test
