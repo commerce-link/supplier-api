@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierDeliveryAddress;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderRejectedException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
@@ -11,7 +13,9 @@ import pl.commercelink.inventory.supplier.api.SupplierProvider;
 import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 import pl.commercelink.inventory.supplier.api.SupplierQuote;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -108,7 +112,13 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     @Override
     protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
                                               List<SupplierOrderLine> lines) {
-        return provider.placeOrder(purchaseRequest(clientOrderRef, lines));
+        return provider.placeOrder(purchaseRequest(provider, clientOrderRef, lines));
+    }
+
+    @Override
+    protected final SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                              List<SupplierOrderLine> lines, Map<String, String> options) {
+        return provider.placeOrder(new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId(), options));
     }
 
     @Test
@@ -118,7 +128,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -128,7 +138,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderOutcomeUnknownException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
@@ -138,14 +148,14 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
 
         // when / then
         assertThrows(SupplierOrderRejectedException.class,
-                () -> provider.placeOrder(purchaseRequest(uniqueClientOrderRef(), sampleLines())));
+                () -> provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines())));
     }
 
     @Test
     void findPlacedOrderSeesPreviouslyPlacedOrder() {
         // given
         SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(provider, uniqueClientOrderRef(), sampleLines());
 
         // when
         SupplierOrderResult placed = provider.placeOrder(request);
@@ -160,7 +170,7 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
     void findPlacedOrderReturnsEmptyForUnknownRef() {
         // given
         SupplierProvider provider = providerFullyAvailable();
-        SupplierPurchaseRequest request = purchaseRequest(uniqueClientOrderRef(), sampleLines());
+        SupplierPurchaseRequest request = purchaseRequest(provider, uniqueClientOrderRef(), sampleLines());
 
         // when
         Optional<SupplierOrderResult> found = provider.findPlacedOrder(request);
@@ -234,7 +244,59 @@ public abstract class SupplierOrderingContractTest extends SupplierPlacementCont
         return provider;
     }
 
-    protected final SupplierPurchaseRequest purchaseRequest(String clientOrderRef, List<SupplierOrderLine> lines) {
-        return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId());
+    protected final SupplierPurchaseRequest purchaseRequest(SupplierProvider provider, String clientOrderRef,
+                                                            List<SupplierOrderLine> lines) {
+        return new SupplierPurchaseRequest(clientOrderRef, lines, deliveryAddressId(),
+                sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
+    }
+
+    @Test
+    void orderOptionsAreWellFormed() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+
+        assertEquals(options.size(), options.stream().map(SupplierOrderOption::key).distinct().count());
+        options.forEach(option -> assertFalse(option.choices().isEmpty(), option.key() + " has no choices"));
+    }
+
+    @Test
+    void placeOrderWithoutRequiredOptionThrowsRejected() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+        SupplierOrderOption required = options.stream().filter(SupplierOrderOption::required).findFirst()
+                .orElseGet(() -> { assumeTrue(false, "No required option declared"); return null; });
+        SupplierProvider provider = providerFullyAvailable();
+        Map<String, String> chosen = new LinkedHashMap<>(sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
+        chosen.remove(required.key());
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines(), deliveryAddressId(), chosen)));
+        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    @Test
+    void placeOrderWithUnknownOptionValueThrowsRejected() {
+        List<SupplierOrderOption> options = assumeOrderOptions();
+        SupplierProvider provider = providerFullyAvailable();
+        Map<String, String> chosen = new LinkedHashMap<>(sampleOptions(provider, SupplierOrderOptionsContext.warehouse()));
+        chosen.put(options.getFirst().key(), "tck-unknown-value");
+
+        assertThrows(SupplierOrderRejectedException.class, () -> provider.placeOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines(), deliveryAddressId(), chosen)));
+        remoteOrdersPlaced().ifPresent(count -> assertEquals(0, count));
+    }
+
+    @Test
+    void placeOrderWithSampleOptionsSucceeds() {
+        assumeOrderOptions();
+        SupplierProvider provider = providerFullyAvailable();
+
+        SupplierOrderResult result = provider.placeOrder(purchaseRequest(provider, uniqueClientOrderRef(), sampleLines()));
+
+        assertFalse(result.externalOrderId().isBlank());
+    }
+
+    private List<SupplierOrderOption> assumeOrderOptions() {
+        List<SupplierOrderOption> options = providerFullyAvailable().orderOptions(SupplierOrderOptionsContext.warehouse());
+        assumeTrue(!options.isEmpty(), "Supplier declares no order options");
+        return options;
     }
 }

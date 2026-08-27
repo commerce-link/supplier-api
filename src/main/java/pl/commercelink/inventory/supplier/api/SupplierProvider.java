@@ -33,6 +33,19 @@ public interface SupplierProvider {
     }
 
     /**
+     * Decisions the supplier needs per order (e.g. delivery method), with the values it accepts.
+     * The application renders them before the purchase is confirmed and sends the chosen values in
+     * {@link SupplierPurchaseRequest#options()} / {@link SupplierDropshipRequest#options()}. May be
+     * called several times per order (render, validate, approve) and must not create anything
+     * remotely; failures surface as {@link SupplierOrderException} and block ordering. Adapters
+     * validate the received values themselves and reject a missing required option or an unknown
+     * value with {@link SupplierOrderRejectedException} before anything exists at the supplier.
+     */
+    default List<SupplierOrderOption> orderOptions(SupplierOrderOptionsContext context) {
+        return List.of();
+    }
+
+    /**
      * Whether the supplier can ship an order directly to the end customer (dropshipping).
      * Independent from {@link #supportsOrdering()}: real suppliers expose dropshipping as a
      * different endpoint with its own contract (e.g. ELKO {@code /Orders/EndUser}) and it may
@@ -46,10 +59,21 @@ public interface SupplierProvider {
     /**
      * Places an order shipped by the supplier straight to {@link SupplierDropshipRequest#consignee()}.
      * Same rules as {@link #placeOrder}: idempotent per {@code clientOrderRef}, all-or-nothing on
-     * availability, failures surface only as {@link SupplierOrderException}.
+     * availability, failures surface only as {@link SupplierOrderException}. When
+     * {@link SupplierDropshipRequest#pickupPoint()} is present the parcel goes to that carrier
+     * point instead of the consignee's street address — see {@link #supportsPickupPointDropship()}.
      */
     default SupplierOrderResult placeDropshipOrder(SupplierDropshipRequest request) {
         throw new UnsupportedOperationException("Dropshipping not supported by this supplier");
+    }
+
+    /**
+     * Whether {@link #placeDropshipOrder} honours {@link SupplierDropshipRequest#pickupPoint()}.
+     * A request carrying a pickup point sent to a provider answering {@code false} is rejected
+     * before any remote call — the parcel is never silently redirected to the street address.
+     */
+    default boolean supportsPickupPointDropship() {
+        return false;
     }
 
     default List<SupplierQuote> checkAvailability(List<SupplierOrderLine> lines) {
@@ -76,6 +100,25 @@ public interface SupplierProvider {
      * order is visible; communication failures surface as {@link SupplierOrderException}.
      */
     default Optional<SupplierOrderResult> findPlacedOrder(SupplierPurchaseRequest request) {
+        return Optional.empty();
+    }
+
+    /**
+     * Whether the supplier can report the status and parcels of a placed order. Independent
+     * from ordering/dropshipping support; the application polls only providers answering
+     * {@code true}.
+     */
+    default boolean supportsOrderTracking() {
+        return false;
+    }
+
+    /**
+     * Read-only snapshot of an order previously placed at the supplier: its state and the
+     * parcels shipped so far. Empty when the supplier does not (yet) see the order. MUST never
+     * mutate anything remotely. Communication failures surface as {@link SupplierOrderException}.
+     * Delivered-to-customer dates are deliberately not part of the contract.
+     */
+    default Optional<SupplierOrderTracking> trackOrder(SupplierOrderLookup lookup) {
         return Optional.empty();
     }
 }

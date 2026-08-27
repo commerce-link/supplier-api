@@ -46,7 +46,8 @@ Providers that return `true` from `supportsOrdering()` implement `checkAvailabil
 3. **Order id required** — a blank or missing `externalOrderId` in the supplier response raises
    `SupplierOrderException` (an order without a traceable id cannot be reconciled).
 4. **Ref guard** — a blank or missing `clientOrderRef` raises `SupplierOrderException` before any
-   remote call (a blank ref would silently disable idempotency).
+   remote call (a blank ref would silently disable idempotency), including before the request's
+   options are looked up, since `orderOptions` (rule 13) is itself a remote call.
 5. **Single failure type** — all failures surface only as `SupplierOrderException`, never as raw
    HTTP or client exceptions; the application's error handling keys on the SPI type.
 6. **Fail closed** — `checkAvailability` quotes quantity 0 for an unknown product or a missing
@@ -107,12 +108,68 @@ closed, missing sku fails closed). Instead of rule 8, dropshipping adds:
    an email — carriers notify the end customer directly, so incomplete contact data would
    surface as a delivery failure days later.
 
+9. **Outcome classes** — a dropship placement follows the same failure classes as `placeOrder`:
+   a definite pre-send failure (availability, basket, address creation) raises
+   `SupplierOrderRejectedException`; a failure once the placement request may have left the
+   process raises `SupplierOrderOutcomeUnknownException` (the engine does this for any other
+   exception thrown by `placeNewDropshipOrder`). `findPlacedOrder` probes the dropship lookup
+   too, so reconcile finds dropship orders living in a separate supplier view.
+10. **Pickup points** — `SupplierDropshipRequest.pickupPoint` (`SupplierPickupPoint`: canonical
+   carrier name + point code, optional address) asks the supplier to deliver to a carrier point.
+   Providers declare support with `supportsPickupPointDropship()` (default `false`); a request
+   carrying a pickup point to a provider without support raises `SupplierOrderRejectedException`
+   before any remote call — the parcel is never redirected to the street address. An adapter that
+   supports pickup points but cannot resolve the requested code against its own point list raises
+   `SupplierOrderRejectedException` before creating anything; it never falls back to courier
+   delivery. The consignee stays mandatory (recipient name and contact data for the carrier
+   notification).
+
+Order options apply to both contracts:
+
+11. **Order options** — `orderOptions(context)` lists the decisions the supplier needs per order with
+    the values it accepts; the application asks the operator and sends the answers in
+    `SupplierPurchaseRequest.options` / `SupplierDropshipRequest.options`. Empty list = no decisions.
+12. **Options fail closed** — a missing required option or a value outside the declared choices is a
+    `SupplierOrderRejectedException` raised before anything is created at the supplier; adapters never
+    substitute the default silently (it only preselects the UI).
+13. **Options are read-only lookups** — `orderOptions` may be called repeatedly, must not create
+    anything remotely, and surfaces lookup failures as `SupplierOrderException`.
+
 The contract is executable: adapters extend `api.testing.SupplierDropshipContractTest`
 (required hooks `dropshipProvider()`, `dropshipProviderWithShortage()`, `sampleLines()`,
 `uniqueClientOrderRef()`; optional `sampleConsignee()`, `dropshipProviderWithFailingBackend()`,
-`remoteDropshipOrdersPlaced()`, `remoteCalls()`). Like the ordering kit, it extends the common
-base `api.testing.SupplierPlacementContractTest`, which enforces the shared placement rules
-(idempotency, all-or-nothing, ref guard, single failure type).
+`remoteDropshipOrdersPlaced()`, `remoteCalls()`,
+`dropshipProviderWithPlacementTransportFailure()`, `dropshipProviderRejectingOrders()`,
+`samplePickupPoint()`, `dropshipProviderWithoutPickupPoints()`, `remotePickupPointCode()`). Like
+the ordering kit, it extends the common base `api.testing.SupplierPlacementContractTest`, which
+enforces the shared placement rules (idempotency, all-or-nothing, ref guard, single failure
+type).
+
+## Order tracking contract
+
+Providers that return `true` from `supportsOrderTracking()` implement
+`trackOrder(SupplierOrderLookup)`: a **read-only** snapshot of an order previously placed at the
+supplier — `SupplierOrderTracking(state, parcels)` with `state` in
+`PROCESSING | PARTIALLY_SHIPPED | SHIPPED | CANCELLED` and one `SupplierParcel` per parcel handed
+to a carrier (`carrier` and `trackingNo` mandatory, `trackingUrl`/`shippedAt` optional, `lines`
+only when the supplier reports the split — an empty list means "everything still outstanding").
+
+Rules:
+
+1. **Read-only** — `trackOrder` never places, changes or cancels anything.
+2. **Lookup by whichever id the API indexes** — `SupplierOrderLookup` carries the supplier's
+   `externalOrderId` and our `clientOrderRef`; at least one is present (the record rejects an
+   empty lookup before any remote call).
+3. **Unknown → empty** — an order the supplier does not (yet) see yields `Optional.empty()`, not
+   an exception.
+4. **Single failure type** — communication failures surface only as `SupplierOrderException`.
+5. **No delivered date** — delivery to the end customer is out of scope; the application keeps it
+   manual.
+
+The contract is executable: adapters extend `api.testing.SupplierOrderTrackingContractTest`
+(required hooks `trackingProvider()`, `sampleLines()`, `uniqueClientOrderRef()`,
+`placeSampleOrder(provider, ref)`; optional `advanceToShipped(provider, ref, externalOrderId)`,
+`trackingProviderWithFailingBackend()`, `remotePlacedOrders()`).
 
 ### Ordering building blocks (`api.ordering` package)
 

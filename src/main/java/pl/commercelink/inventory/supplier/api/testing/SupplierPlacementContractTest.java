@@ -3,10 +3,14 @@ package pl.commercelink.inventory.supplier.api.testing;
 import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -47,6 +51,14 @@ public abstract class SupplierPlacementContractTest {
     protected abstract SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
                                                  List<SupplierOrderLine> lines);
 
+    /**
+     * Places an order for the given client order reference, lines, and options, without
+     * consulting {@link SupplierProvider#orderOptions(SupplierOrderOptionsContext)} — used by
+     * tests that must observe zero remote calls, since the option lookup is itself remote.
+     */
+    protected abstract SupplierOrderResult place(SupplierProvider provider, String clientOrderRef,
+                                                 List<SupplierOrderLine> lines, Map<String, String> options);
+
     /** Provider whose backend fails every remote call with a raw transport error. */
     protected Optional<SupplierProvider> placementProviderWithFailingBackend() {
         return Optional.empty();
@@ -60,6 +72,22 @@ public abstract class SupplierPlacementContractTest {
     /** Number of remote backend interactions since the test started, if observable. */
     protected OptionalInt remoteCalls() {
         return OptionalInt.empty();
+    }
+
+    /**
+     * Answers for every option the provider declares: its default, else the first choice. Adapters
+     * whose fixture needs different answers override this.
+     */
+    protected Map<String, String> sampleOptions(SupplierProvider provider, SupplierOrderOptionsContext context) {
+        Map<String, String> chosen = new LinkedHashMap<>();
+        for (SupplierOrderOption option : provider.orderOptions(context)) {
+            String value = option.defaultValue() != null ? option.defaultValue()
+                    : option.choices().isEmpty() ? null : option.choices().getFirst().value();
+            if (value != null) {
+                chosen.put(option.key(), value);
+            }
+        }
+        return chosen;
     }
 
     @Test
@@ -116,8 +144,10 @@ public abstract class SupplierPlacementContractTest {
         SupplierProvider provider = placementProvider();
 
         // when / then
+        // Option lookup (sampleOptions -> orderOptions) is itself a remote call, so it must not
+        // run here: pass an empty options map so the ref guard is the first thing that fires.
         assertThrows(SupplierOrderException.class,
-                () -> place(provider, " ", sampleLines()));
+                () -> place(provider, " ", sampleLines(), Map.of()));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
@@ -127,8 +157,10 @@ public abstract class SupplierPlacementContractTest {
         SupplierProvider provider = placementProvider();
 
         // when / then
+        // Option lookup (sampleOptions -> orderOptions) is itself a remote call, so it must not
+        // run here: pass an empty options map so the ref guard is the first thing that fires.
         assertThrows(SupplierOrderException.class,
-                () -> place(provider, null, sampleLines()));
+                () -> place(provider, null, sampleLines(), Map.of()));
         remoteCalls().ifPresent(count -> assertEquals(0, count));
     }
 
