@@ -39,6 +39,13 @@ public record InventoryItem(
         this(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier, sellable, inStock, inDelivery, null);
     }
 
+    /** The same row attributed to a different supplier name (e.g. a per-connection identity). */
+    public InventoryItem withSupplier(String supplier) {
+        return this.supplier.equals(supplier) ? this
+                : new InventoryItem(ean, mfn, netPrice, currency, qty, leadTimeDays, supplier,
+                        sellable, inStock, inDelivery, sku);
+    }
+
     public String uuid() {
         return supplier + "_" + ean + "_" + mfn;
     }
