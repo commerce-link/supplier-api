@@ -14,6 +14,12 @@ public record SupplierInfo(
         this(name, type, accuracyScore, origin, shippingPolicy, null);
     }
 
+    /** The same supplier metadata under a different name (e.g. a per-connection identity). */
+    public SupplierInfo withName(String name) {
+        return this.name.equals(name) ? this
+                : new SupplierInfo(name, type, accuracyScore, origin, shippingPolicy, partnerSiteUrlTemplate);
+    }
+
     public boolean isLocalFor(String destination) {
         return origin.equalsIgnoreCase(destination);
     }

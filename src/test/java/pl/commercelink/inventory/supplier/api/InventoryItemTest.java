@@ -4,8 +4,26 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class InventoryItemTest {
+
+    @Test
+    void withSupplierReattributesTheRowKeepingEveryOtherField() {
+        // given
+        InventoryItem parsedByType = new InventoryItem("1234567890123", "MFN-1", 10.0, "PLN", 5, 1, "Kosatec",
+                true, true, false, "0101");
+
+        // when
+        InventoryItem stamped = parsedByType.withSupplier("Kosatec-k7f3a9c2");
+
+        // then
+        assertEquals("Kosatec-k7f3a9c2", stamped.supplier());
+        assertEquals("Kosatec-k7f3a9c2_1234567890123_MFN-1", stamped.uuid());
+        assertEquals(parsedByType.netPrice(), stamped.netPrice());
+        assertEquals(parsedByType.sku(), stamped.sku());
+        assertSame(parsedByType, parsedByType.withSupplier("Kosatec"));
+    }
 
     @Test
     void withSkuAttachesRawSkuWithoutNormalization() {
