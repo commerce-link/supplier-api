@@ -6,6 +6,7 @@ import org.apache.commons.net.ftp.FTPClient;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 
 public class FtpFileDownloader {
 
@@ -13,16 +14,32 @@ public class FtpFileDownloader {
     private final int port;
     private final String username;
     private final String password;
+    private final Duration connectTimeout;
+    private final Duration readTimeout;
 
     public FtpFileDownloader(String host, int port, String username, String password) {
+        this(host, port, username, password,
+                HttpFileDownloader.DEFAULT_CONNECT_TIMEOUT, HttpFileDownloader.DEFAULT_READ_TIMEOUT);
+    }
+
+    /**
+     * @param readTimeout maximum silence on the control or data connection, not a limit on the whole download
+     */
+    public FtpFileDownloader(String host, int port, String username, String password,
+                             Duration connectTimeout, Duration readTimeout) {
         this.host = host;
         this.port = port;
         this.username = username;
         this.password = password;
+        this.connectTimeout = connectTimeout;
+        this.readTimeout = readTimeout;
     }
 
     public byte[] download(String remoteFilePath) throws ResourceDownloadException {
         FTPClient ftpClient = new FTPClient();
+        ftpClient.setConnectTimeout(Math.toIntExact(connectTimeout.toMillis()));
+        ftpClient.setDefaultTimeout(Math.toIntExact(readTimeout.toMillis()));
+        ftpClient.setDataTimeout(readTimeout);
         try {
             ftpClient.connect(host, port);
             ftpClient.login(username, password);
