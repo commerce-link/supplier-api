@@ -149,7 +149,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-1", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "place", "toResult:PO-1"), placement.callLog);
+        assertEquals(List.of("findExisting", "translate", "place", "toResult:PO-1"), placement.callLog);
     }
 
     @Test
@@ -178,7 +178,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "toResult:PO-EXISTING"), placement.callLog);
+        assertEquals(List.of("findExisting", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -204,14 +204,55 @@ class IdempotentOrderPlacementTest {
     }
 
     @Test
-    void translatesLinesBeforeReplayCheck() {
+    void untranslatableLineIsRejectedAfterTheReplayCheckFindsNothing() {
+        // given - nothing under the ref, and a line whose product code is gone
+        TestPlacement placement = new TestPlacement();
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when / then - still refused before any write
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.place(REQUEST));
+        assertEquals(List.of("findExisting", "translate"), placement.callLog);
+    }
+
+    @Test
+    void existingOrderIsReplayedEvenWhenALineCanNoLongerBeTranslated() {
+        // given - the order exists, but the product left the feed since it was placed
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-EXISTING";
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when
+        SupplierOrderResult result = placement.place(REQUEST);
+
+        // then
+        assertEquals("PO-EXISTING", result.externalOrderId());
+        assertEquals(List.of("findExisting", "toResult:PO-EXISTING"), placement.callLog);
+    }
+
+    @Test
+    void untranslatableDropshipLineIsRejectedAfterTheReplayCheckFindsNothing() {
         // given
         TestPlacement placement = new TestPlacement();
-        placement.translationFailure = new SupplierOrderException("No code found");
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
 
         // when / then
-        assertThrows(SupplierOrderException.class, () -> placement.place(REQUEST));
-        assertEquals(List.of("translate"), placement.callLog);
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.placeDropship(DROPSHIP_REQUEST));
+        assertEquals(List.of("findExistingDropship", "translate"), placement.callLog);
+    }
+
+    @Test
+    void existingDropshipOrderIsReplayedEvenWhenALineCanNoLongerBeTranslated() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingDropshipOrder = "PO-EXISTING";
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when
+        SupplierOrderResult result = placement.placeDropship(DROPSHIP_REQUEST);
+
+        // then
+        assertEquals("PO-EXISTING", result.externalOrderId());
+        assertEquals(List.of("findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -361,7 +402,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-1", result.externalOrderId());
-        assertEquals(List.of("translate", "findExistingDropship", "placeDropship", "toResult:PO-1"), placement.callLog);
+        assertEquals(List.of("findExistingDropship", "translate", "placeDropship", "toResult:PO-1"), placement.callLog);
         assertEquals(CONSIGNEE, placement.dropshipPlacedWith.consignee());
     }
 
@@ -376,7 +417,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
-        assertEquals(List.of("translate", "findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
+        assertEquals(List.of("findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test

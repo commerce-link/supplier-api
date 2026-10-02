@@ -25,8 +25,6 @@ public abstract class IdempotentOrderPlacement<L, O> {
             throw new SupplierOrderException(
                     "Missing clientOrderRef, refusing to place a non-idempotent " + supplierName() + " order");
         }
-        List<L> lines = wrapFailures("order line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
         synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|" + clientOrderRef, key -> new Object())) {
             Optional<O> existing = wrapFailures("replay check failed",
                     () -> findExistingOrder(clientOrderRef));
@@ -34,6 +32,12 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("order result mapping failed",
                         () -> toResult(existing.orElseThrow(), request));
             }
+            // Lines are translated only once nothing exists under the reference. A line that can no longer be
+            // translated (the product left the feed after the order was placed) must not turn an order that EXISTS
+            // into a rejection: the app reads a rejection as "nothing was created" and fails the delivery next to
+            // the order. Translation still precedes every write, so a missing code is refused before ordering.
+        List<L> lines = wrapFailures("order line translation failed",
+                () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("order placement failed",
                     () -> placeNewOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("order id extraction failed",
@@ -62,8 +66,6 @@ public abstract class IdempotentOrderPlacement<L, O> {
                     + " does not deliver dropship orders to carrier pickup points (requested "
                     + request.pickupPoint().carrier() + " " + request.pickupPoint().code() + ")");
         }
-        List<L> lines = wrapFailures("dropship line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
         // Separate |DS| namespace: a dropship retry must replay the dropship order, never contend
         // with a regular purchase that happens to reuse the same ref.
         synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|DS|" + clientOrderRef, key -> new Object())) {
@@ -73,6 +75,9 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("dropship result mapping failed",
                         () -> toDropshipResult(existing.orElseThrow(), request));
             }
+            // Translated after the replay check for the reason given in placeIdempotently.
+        List<L> lines = wrapFailures("dropship line translation failed",
+                () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("dropship order placement failed",
                     () -> placeNewDropshipOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("dropship order id extraction failed",
