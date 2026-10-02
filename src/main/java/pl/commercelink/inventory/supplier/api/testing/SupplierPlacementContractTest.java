@@ -1,12 +1,15 @@
 package pl.commercelink.inventory.supplier.api.testing;
 
 import org.junit.jupiter.api.Test;
+import pl.commercelink.inventory.supplier.api.SupplierOrderAwaitingSupplierException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOption;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOptionsContext;
+import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderResult;
 import pl.commercelink.inventory.supplier.api.SupplierProvider;
+import pl.commercelink.inventory.supplier.api.SupplierPurchaseRequest;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -72,6 +75,15 @@ public abstract class SupplierPlacementContractTest {
     /** Number of remote backend interactions since the test started, if observable. */
     protected OptionalInt remoteCalls() {
         return OptionalInt.empty();
+    }
+
+    /** A provider whose supplier accepts the order but confirms it later; empty when the adapter cannot do that. */
+    protected Optional<SupplierProvider> placementProviderWithDeferredConfirmation() {
+        return Optional.empty();
+    }
+
+    /** Makes the supplier behind {@link #placementProviderWithDeferredConfirmation()} confirm everything pending. */
+    protected void confirmDeferredReservations(SupplierProvider provider) {
     }
 
     /**
@@ -172,6 +184,38 @@ public abstract class SupplierPlacementContractTest {
         // when / then
         assertThrows(SupplierOrderException.class,
                 () -> place(provider, uniqueClientOrderRef(), sampleLines()));
+    }
+
+    @Test
+    void deferredConfirmationCompletesTheSameOrderOnce() {
+        // given
+        SupplierProvider provider = assumePresent(placementProviderWithDeferredConfirmation(), "deferred confirmation");
+        assertTrue(provider.supportsDeferredConfirmation());
+        String clientOrderRef = uniqueClientOrderRef();
+        List<SupplierOrderLine> lines = sampleLines();
+
+        // when
+        SupplierOrderAwaitingSupplierException awaiting = assertThrows(SupplierOrderAwaitingSupplierException.class,
+                () -> place(provider, clientOrderRef, lines));
+        confirmDeferredReservations(provider);
+        SupplierOrderResult first = provider.completePlacedOrder(new SupplierPurchaseRequest(clientOrderRef, lines));
+        SupplierOrderResult second = provider.completePlacedOrder(new SupplierPurchaseRequest(clientOrderRef, lines));
+
+        // then
+        assertEquals(awaiting.externalOrderId(), first.externalOrderId());
+        assertEquals(first.externalOrderId(), second.externalOrderId());
+        remotePlacedOrders().ifPresent(placed -> assertEquals(1, placed));
+    }
+
+    @Test
+    void completionOfUnknownRefIsOutcomeUnknown() {
+        // given
+        SupplierProvider provider = assumePresent(placementProviderWithDeferredConfirmation(), "deferred confirmation");
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class, () -> provider.completePlacedOrder(
+                new SupplierPurchaseRequest(uniqueClientOrderRef(), sampleLines())));
+        remotePlacedOrders().ifPresent(placed -> assertEquals(0, placed));
     }
 
     protected static SupplierProvider assumePresent(Optional<SupplierProvider> provider, String scenario) {
