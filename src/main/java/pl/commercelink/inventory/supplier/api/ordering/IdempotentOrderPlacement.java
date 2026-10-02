@@ -36,8 +36,8 @@ public abstract class IdempotentOrderPlacement<L, O> {
             // translated (the product left the feed after the order was placed) must not turn an order that EXISTS
             // into a rejection: the app reads a rejection as "nothing was created" and fails the delivery next to
             // the order. Translation still precedes every write, so a missing code is refused before ordering.
-        List<L> lines = wrapFailures("order line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
+            List<L> lines = wrapFailures("order line translation failed",
+                    () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("order placement failed",
                     () -> placeNewOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("order id extraction failed",
@@ -76,8 +76,8 @@ public abstract class IdempotentOrderPlacement<L, O> {
                         () -> toDropshipResult(existing.orElseThrow(), request));
             }
             // Translated after the replay check for the reason given in placeIdempotently.
-        List<L> lines = wrapFailures("dropship line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
+            List<L> lines = wrapFailures("dropship line translation failed",
+                    () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("dropship order placement failed",
                     () -> placeNewDropshipOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("dropship order id extraction failed",
