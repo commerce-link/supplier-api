@@ -1,6 +1,7 @@
 package pl.commercelink.inventory.supplier.api.ordering;
 
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
+import pl.commercelink.inventory.supplier.api.SupplierOrderAwaitingSupplierException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
@@ -85,6 +86,56 @@ public abstract class IdempotentOrderPlacement<L, O> {
     }
 
     /**
+     * Finishes a purchase the supplier is still confirming. Same lock as {@link #placeIdempotently}, so a completion
+     * never overlaps a placement or another completion of the same reference. Never places an order.
+     */
+    protected final SupplierOrderResult completePlacedIdempotently(SupplierPurchaseRequest request) {
+        String clientOrderRef = requireRef(request.clientOrderRef(), "complete");
+        synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|" + clientOrderRef, key -> new Object())) {
+            Optional<O> existing = wrapFailures("completion lookup failed", () -> findExistingOrder(clientOrderRef));
+            if (existing.isEmpty()) {
+                throw new SupplierOrderOutcomeUnknownException(supplierName() + " has no order under ref "
+                        + clientOrderRef + " to complete - check the supplier panel before ordering again");
+            }
+            return wrapPlacementFailures("order completion failed",
+                    () -> toCompletedResult(existing.orElseThrow(), request));
+        }
+    }
+
+    /** Dropship counterpart of {@link #completePlacedIdempotently}, under the {@code |DS|} lock namespace. */
+    protected final SupplierOrderResult completePlacedDropshipIdempotently(SupplierDropshipRequest request) {
+        String clientOrderRef = requireRef(request.clientOrderRef(), "complete a dropship");
+        synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|DS|" + clientOrderRef, key -> new Object())) {
+            Optional<O> existing = wrapFailures("dropship completion lookup failed",
+                    () -> findExistingDropshipOrder(clientOrderRef));
+            if (existing.isEmpty()) {
+                throw new SupplierOrderOutcomeUnknownException(supplierName() + " has no dropship order under ref "
+                        + clientOrderRef + " to complete - check the supplier panel before ordering again");
+            }
+            return wrapPlacementFailures("dropship order completion failed",
+                    () -> toCompletedDropshipResult(existing.orElseThrow(), request));
+        }
+    }
+
+    /** Maps an order found by {@link #completePlacedIdempotently}; may write. Defaults to {@link #toResult}. */
+    protected SupplierOrderResult toCompletedResult(O order, SupplierPurchaseRequest request) {
+        return toResult(order, request);
+    }
+
+    /** Dropship counterpart of {@link #toCompletedResult}. Defaults to {@link #toDropshipResult}. */
+    protected SupplierOrderResult toCompletedDropshipResult(O order, SupplierDropshipRequest request) {
+        return toDropshipResult(order, request);
+    }
+
+    private String requireRef(String clientOrderRef, String action) {
+        if (clientOrderRef == null || clientOrderRef.isBlank()) {
+            throw new SupplierOrderException("Missing clientOrderRef, refusing to " + action + " "
+                    + supplierName() + " order");
+        }
+        return clientOrderRef;
+    }
+
+    /**
      * Read-only probe: the order previously placed with {@code request.clientOrderRef()},
      * if this supplier reports one. MUST never place a new order.
      */
@@ -149,7 +200,8 @@ public abstract class IdempotentOrderPlacement<L, O> {
     private <T> T wrapPlacementFailures(String activity, Supplier<T> action) {
         try {
             return action.get();
-        } catch (SupplierOrderRejectedException | SupplierOrderOutcomeUnknownException e) {
+        } catch (SupplierOrderRejectedException | SupplierOrderOutcomeUnknownException
+                 | SupplierOrderAwaitingSupplierException e) {
             throw e;
         } catch (SupplierOrderException e) {
             // The request may have left the process: without an explicit rejection the
