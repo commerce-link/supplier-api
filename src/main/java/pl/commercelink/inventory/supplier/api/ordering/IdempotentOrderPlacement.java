@@ -1,6 +1,7 @@
 package pl.commercelink.inventory.supplier.api.ordering;
 
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
+import pl.commercelink.inventory.supplier.api.SupplierOrderAwaitingSupplierException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
@@ -24,8 +25,6 @@ public abstract class IdempotentOrderPlacement<L, O> {
             throw new SupplierOrderException(
                     "Missing clientOrderRef, refusing to place a non-idempotent " + supplierName() + " order");
         }
-        List<L> lines = wrapFailures("order line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
         synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|" + clientOrderRef, key -> new Object())) {
             Optional<O> existing = wrapFailures("replay check failed",
                     () -> findExistingOrder(clientOrderRef));
@@ -33,6 +32,12 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("order result mapping failed",
                         () -> toResult(existing.orElseThrow(), request));
             }
+            // Lines are translated only once nothing exists under the reference. A line that can no longer be
+            // translated (the product left the feed after the order was placed) must not turn an order that EXISTS
+            // into a rejection: the app reads a rejection as "nothing was created" and fails the delivery next to
+            // the order. Translation still precedes every write, so a missing code is refused before ordering.
+            List<L> lines = wrapFailures("order line translation failed",
+                    () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("order placement failed",
                     () -> placeNewOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("order id extraction failed",
@@ -61,8 +66,6 @@ public abstract class IdempotentOrderPlacement<L, O> {
                     + " does not deliver dropship orders to carrier pickup points (requested "
                     + request.pickupPoint().carrier() + " " + request.pickupPoint().code() + ")");
         }
-        List<L> lines = wrapFailures("dropship line translation failed",
-                () -> request.lines().stream().map(this::toSupplierLine).toList());
         // Separate |DS| namespace: a dropship retry must replay the dropship order, never contend
         // with a regular purchase that happens to reuse the same ref.
         synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|DS|" + clientOrderRef, key -> new Object())) {
@@ -72,6 +75,9 @@ public abstract class IdempotentOrderPlacement<L, O> {
                 return wrapFailures("dropship result mapping failed",
                         () -> toDropshipResult(existing.orElseThrow(), request));
             }
+            // Translated after the replay check for the reason given in placeIdempotently.
+            List<L> lines = wrapFailures("dropship line translation failed",
+                    () -> request.lines().stream().map(this::toSupplierLine).toList());
             O order = wrapPlacementFailures("dropship order placement failed",
                     () -> placeNewDropshipOrder(request, lines));
             String externalOrderId = wrapPlacementFailures("dropship order id extraction failed",
@@ -82,6 +88,56 @@ public abstract class IdempotentOrderPlacement<L, O> {
             }
             return wrapPlacementFailures("dropship result mapping failed", () -> toDropshipResult(order, request));
         }
+    }
+
+    /**
+     * Finishes a purchase the supplier is still confirming. Same lock as {@link #placeIdempotently}, so a completion
+     * never overlaps a placement or another completion of the same reference. Never places an order.
+     */
+    protected final SupplierOrderResult completePlacedIdempotently(SupplierPurchaseRequest request) {
+        String clientOrderRef = requireRef(request.clientOrderRef(), "complete");
+        synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|" + clientOrderRef, key -> new Object())) {
+            Optional<O> existing = wrapFailures("completion lookup failed", () -> findExistingOrder(clientOrderRef));
+            if (existing.isEmpty()) {
+                throw new SupplierOrderOutcomeUnknownException(supplierName() + " has no order under ref "
+                        + clientOrderRef + " to complete - check the supplier panel before ordering again");
+            }
+            return wrapPlacementFailures("order completion failed",
+                    () -> toCompletedResult(existing.orElseThrow(), request));
+        }
+    }
+
+    /** Dropship counterpart of {@link #completePlacedIdempotently}, under the {@code |DS|} lock namespace. */
+    protected final SupplierOrderResult completePlacedDropshipIdempotently(SupplierDropshipRequest request) {
+        String clientOrderRef = requireRef(request.clientOrderRef(), "complete a dropship");
+        synchronized (ORDER_LOCKS.computeIfAbsent(getClass().getName() + "|DS|" + clientOrderRef, key -> new Object())) {
+            Optional<O> existing = wrapFailures("dropship completion lookup failed",
+                    () -> findExistingDropshipOrder(clientOrderRef));
+            if (existing.isEmpty()) {
+                throw new SupplierOrderOutcomeUnknownException(supplierName() + " has no dropship order under ref "
+                        + clientOrderRef + " to complete - check the supplier panel before ordering again");
+            }
+            return wrapPlacementFailures("dropship order completion failed",
+                    () -> toCompletedDropshipResult(existing.orElseThrow(), request));
+        }
+    }
+
+    /** Maps an order found by {@link #completePlacedIdempotently}; may write. Defaults to {@link #toResult}. */
+    protected SupplierOrderResult toCompletedResult(O order, SupplierPurchaseRequest request) {
+        return toResult(order, request);
+    }
+
+    /** Dropship counterpart of {@link #toCompletedResult}. Defaults to {@link #toDropshipResult}. */
+    protected SupplierOrderResult toCompletedDropshipResult(O order, SupplierDropshipRequest request) {
+        return toDropshipResult(order, request);
+    }
+
+    private String requireRef(String clientOrderRef, String action) {
+        if (clientOrderRef == null || clientOrderRef.isBlank()) {
+            throw new SupplierOrderException("Missing clientOrderRef, refusing to " + action + " "
+                    + supplierName() + " order");
+        }
+        return clientOrderRef;
     }
 
     /**
@@ -149,7 +205,8 @@ public abstract class IdempotentOrderPlacement<L, O> {
     private <T> T wrapPlacementFailures(String activity, Supplier<T> action) {
         try {
             return action.get();
-        } catch (SupplierOrderRejectedException | SupplierOrderOutcomeUnknownException e) {
+        } catch (SupplierOrderRejectedException | SupplierOrderOutcomeUnknownException
+                 | SupplierOrderAwaitingSupplierException e) {
             throw e;
         } catch (SupplierOrderException e) {
             // The request may have left the process: without an explicit rejection the

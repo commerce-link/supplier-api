@@ -104,6 +104,29 @@ public interface SupplierProvider {
     }
 
     /**
+     * Whether this supplier may answer a purchase with {@link SupplierOrderAwaitingSupplierException} and then needs
+     * {@link #completePlacedOrder} to finish it.
+     */
+    default boolean supportsDeferredConfirmation() {
+        return false;
+    }
+
+    /**
+     * Finishes a purchase the supplier accepted but had not confirmed yet. May write (e.g. send a reservation to
+     * realization), is idempotent for the same {@code clientOrderRef}, and NEVER places a new order: with nothing
+     * under the reference it throws {@link SupplierOrderOutcomeUnknownException}. Throws
+     * {@link SupplierOrderAwaitingSupplierException} again while the supplier is still confirming.
+     */
+    default SupplierOrderResult completePlacedOrder(SupplierPurchaseRequest request) {
+        throw new UnsupportedOperationException("Deferred order confirmation is not supported by this supplier");
+    }
+
+    /** Dropship counterpart of {@link #completePlacedOrder}. */
+    default SupplierOrderResult completePlacedDropshipOrder(SupplierDropshipRequest request) {
+        throw new UnsupportedOperationException("Deferred dropship confirmation is not supported by this supplier");
+    }
+
+    /**
      * Whether the supplier can report the status and parcels of a placed order. Independent
      * from ordering/dropshipping support; the application polls only providers answering
      * {@code true}.

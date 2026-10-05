@@ -3,6 +3,7 @@ package pl.commercelink.inventory.supplier.api.ordering;
 import org.junit.jupiter.api.Test;
 import pl.commercelink.inventory.supplier.api.SupplierConsignee;
 import pl.commercelink.inventory.supplier.api.SupplierDropshipRequest;
+import pl.commercelink.inventory.supplier.api.SupplierOrderAwaitingSupplierException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderException;
 import pl.commercelink.inventory.supplier.api.SupplierOrderLine;
 import pl.commercelink.inventory.supplier.api.SupplierOrderOutcomeUnknownException;
@@ -119,6 +120,23 @@ class IdempotentOrderPlacementTest {
         }
 
         private SupplierPurchaseRequest toResultCalledWith;
+
+        SupplierOrderResult complete(SupplierPurchaseRequest request) {
+            return completePlacedIdempotently(request);
+        }
+
+        SupplierOrderResult completeDropship(SupplierDropshipRequest request) {
+            return completePlacedDropshipIdempotently(request);
+        }
+
+        private RuntimeException mappingFailure;
+
+        @Override
+        protected SupplierOrderResult toCompletedResult(String order, SupplierPurchaseRequest request) {
+            callLog.add("toCompletedResult");
+            if (mappingFailure != null) throw mappingFailure;
+            return new SupplierOrderResult(order, 10.0, "PLN", List.of());
+        }
     }
 
     @Test
@@ -131,7 +149,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-1", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "place", "toResult:PO-1"), placement.callLog);
+        assertEquals(List.of("findExisting", "translate", "place", "toResult:PO-1"), placement.callLog);
     }
 
     @Test
@@ -160,7 +178,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
-        assertEquals(List.of("translate", "findExisting", "toResult:PO-EXISTING"), placement.callLog);
+        assertEquals(List.of("findExisting", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -186,14 +204,55 @@ class IdempotentOrderPlacementTest {
     }
 
     @Test
-    void translatesLinesBeforeReplayCheck() {
+    void untranslatableLineIsRejectedAfterTheReplayCheckFindsNothing() {
+        // given - nothing under the ref, and a line whose product code is gone
+        TestPlacement placement = new TestPlacement();
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when / then - still refused before any write
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.place(REQUEST));
+        assertEquals(List.of("findExisting", "translate"), placement.callLog);
+    }
+
+    @Test
+    void existingOrderIsReplayedEvenWhenALineCanNoLongerBeTranslated() {
+        // given - the order exists, but the product left the feed since it was placed
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-EXISTING";
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when
+        SupplierOrderResult result = placement.place(REQUEST);
+
+        // then
+        assertEquals("PO-EXISTING", result.externalOrderId());
+        assertEquals(List.of("findExisting", "toResult:PO-EXISTING"), placement.callLog);
+    }
+
+    @Test
+    void untranslatableDropshipLineIsRejectedAfterTheReplayCheckFindsNothing() {
         // given
         TestPlacement placement = new TestPlacement();
-        placement.translationFailure = new SupplierOrderException("No code found");
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
 
         // when / then
-        assertThrows(SupplierOrderException.class, () -> placement.place(REQUEST));
-        assertEquals(List.of("translate"), placement.callLog);
+        assertThrows(SupplierOrderRejectedException.class, () -> placement.placeDropship(DROPSHIP_REQUEST));
+        assertEquals(List.of("findExistingDropship", "translate"), placement.callLog);
+    }
+
+    @Test
+    void existingDropshipOrderIsReplayedEvenWhenALineCanNoLongerBeTranslated() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingDropshipOrder = "PO-EXISTING";
+        placement.translationFailure = new SupplierOrderRejectedException("No code found");
+
+        // when
+        SupplierOrderResult result = placement.placeDropship(DROPSHIP_REQUEST);
+
+        // then
+        assertEquals("PO-EXISTING", result.externalOrderId());
+        assertEquals(List.of("findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -343,7 +402,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-1", result.externalOrderId());
-        assertEquals(List.of("translate", "findExistingDropship", "placeDropship", "toResult:PO-1"), placement.callLog);
+        assertEquals(List.of("findExistingDropship", "translate", "placeDropship", "toResult:PO-1"), placement.callLog);
         assertEquals(CONSIGNEE, placement.dropshipPlacedWith.consignee());
     }
 
@@ -358,7 +417,7 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertEquals("PO-EXISTING", result.externalOrderId());
-        assertEquals(List.of("translate", "findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
+        assertEquals(List.of("findExistingDropship", "toResult:PO-EXISTING"), placement.callLog);
     }
 
     @Test
@@ -527,5 +586,90 @@ class IdempotentOrderPlacementTest {
 
         // then
         assertInstanceOf(UnsupportedOperationException.class, e.getCause());
+    }
+
+    @Test
+    void completeReturnsCompletedResultForExistingOrder() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-7";
+
+        // when
+        SupplierOrderResult result = placement.complete(REQUEST);
+
+        // then
+        assertEquals("PO-7", result.externalOrderId());
+        assertEquals(List.of("findExisting", "toCompletedResult"), placement.callLog);
+    }
+
+    @Test
+    void completeNeverPlacesANewOrderWhenNothingExists() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when
+        SupplierOrderOutcomeUnknownException error = assertThrows(SupplierOrderOutcomeUnknownException.class,
+                () -> placement.complete(REQUEST));
+
+        // then
+        assertTrue(error.getMessage().contains("ref-1"));
+        assertFalse(placement.callLog.contains("place"));
+        assertNull(placement.placedWith);
+    }
+
+    @Test
+    void completePassesAwaitingSupplierThroughUnwrapped() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingOrder = "PO-7";
+        placement.mappingFailure = new SupplierOrderAwaitingSupplierException("PO-7", List.of("SKU-A: 0 of 2 reserved"),
+                "still reserving");
+
+        // when
+        SupplierOrderAwaitingSupplierException error = assertThrows(SupplierOrderAwaitingSupplierException.class,
+                () -> placement.complete(REQUEST));
+
+        // then
+        assertEquals("PO-7", error.externalOrderId());
+        assertEquals(List.of("SKU-A: 0 of 2 reserved"), error.pendingLines());
+    }
+
+    @Test
+    void placementPassesAwaitingSupplierThroughUnwrapped() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.placementFailure = new SupplierOrderAwaitingSupplierException("PO-1", List.of(), "still reserving");
+
+        // when
+        SupplierOrderAwaitingSupplierException error = assertThrows(SupplierOrderAwaitingSupplierException.class,
+                () -> placement.place(REQUEST));
+
+        // then
+        assertEquals("PO-1", error.externalOrderId());
+    }
+
+    @Test
+    void completeDropshipUsesDropshipLookupAndNeverPlaces() {
+        // given
+        TestPlacement placement = new TestPlacement();
+        placement.existingDropshipOrder = "DS-3";
+
+        // when
+        SupplierOrderResult result = placement.completeDropship(DROPSHIP_REQUEST);
+
+        // then
+        assertEquals("DS-3", result.externalOrderId());
+        assertTrue(placement.callLog.contains("findExistingDropship"));
+        assertNull(placement.dropshipPlacedWith);
+    }
+
+    @Test
+    void completeDropshipWithoutOrderIsOutcomeUnknown() {
+        // given
+        TestPlacement placement = new TestPlacement();
+
+        // when / then
+        assertThrows(SupplierOrderOutcomeUnknownException.class, () -> placement.completeDropship(DROPSHIP_REQUEST));
+        assertNull(placement.dropshipPlacedWith);
     }
 }
