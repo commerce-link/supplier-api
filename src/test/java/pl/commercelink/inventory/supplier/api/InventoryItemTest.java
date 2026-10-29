@@ -1,12 +1,43 @@
 package pl.commercelink.inventory.supplier.api;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InventoryItemTest {
+
+    @ParameterizedTest
+    @ValueSource(strings = {"?", ".", " ? ", "0"})
+    void placeholderCodeMakesTheOfferUnsellable(String placeholder) {
+        // given
+        InventoryItem item = new InventoryItem("1234567890123", placeholder, 10.0, "PLN", 5, 1, "Morele");
+
+        // when
+        boolean sellable = item.isSellable();
+
+        // then
+        assertFalse(item.hasMfn());
+        assertFalse(sellable);
+    }
+
+    @Test
+    void codeContainingADotIsARealCode() {
+        // given
+        InventoryItem item = new InventoryItem("1234567890123", "MFN.1", 10.0, "PLN", 5, 1, "Morele");
+
+        // when
+        boolean sellable = item.isSellable();
+
+        // then
+        assertTrue(item.hasMfn());
+        assertTrue(sellable);
+    }
 
     @Test
     void withSupplierReattributesTheRowKeepingEveryOtherField() {

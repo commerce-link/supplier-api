@@ -1,6 +1,7 @@
 package pl.commercelink.inventory.supplier.api;
 
 import java.util.Optional;
+import java.util.Set;
 
 import static pl.commercelink.taxonomy.UnifiedProductIdentifiers.unifyEan;
 import static pl.commercelink.taxonomy.UnifiedProductIdentifiers.unifyMfn;
@@ -20,6 +21,7 @@ public record InventoryItem(
 ) {
 
     private static final String MISSING_EAN_PLACEHOLDER = "1111111111111";
+    private static final Set<String> MISSING_MFN_PLACEHOLDERS = Set.of("0", "?", ".");
 
     public InventoryItem {
         ean = unifyEan(ean);
@@ -59,7 +61,7 @@ public record InventoryItem(
     }
 
     public boolean hasMfn() {
-        return mfn != null && !mfn.isBlank() && !"0".equalsIgnoreCase(mfn);
+        return mfn != null && !mfn.isBlank() && !MISSING_MFN_PLACEHOLDERS.contains(mfn);
     }
 
     public boolean hasSupplier(String other) {
