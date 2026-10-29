@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Timeout;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -47,5 +48,15 @@ class SilentServerDownloadTimeoutTest {
                 "127.0.0.1", silentServer.getLocalPort(), "user", "pass", SHORT, SHORT);
 
         assertThrows(ResourceDownloadException.class, () -> downloader.download("/feed.csv"));
+    }
+
+    @Test
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void sftpLatestFileDownloadFailsWhenServerNeverGreets() {
+        SftpFileDownloader downloader = new SftpFileDownloader(
+                "127.0.0.1", silentServer.getLocalPort(), "user", "pass", SHORT, SHORT);
+
+        assertThrows(ResourceDownloadException.class,
+                () -> downloader.downloadLatest(".", Pattern.compile("feed_.*\\.csv")));
     }
 }

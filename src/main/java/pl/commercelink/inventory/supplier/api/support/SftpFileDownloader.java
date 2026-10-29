@@ -2,9 +2,12 @@ package pl.commercelink.inventory.supplier.api.support;
 
 import com.jcraft.jsch.*;
 
-import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 
 public class SftpFileDownloader {
 
@@ -34,6 +37,28 @@ public class SftpFileDownloader {
     }
 
     public byte[] download(String remoteFilePath) throws ResourceDownloadException {
+        return withChannel("Failed to download resource from sftp server.", channel -> {
+            byte[] content = read(channel, remoteFilePath);
+            System.out.println("File downloaded successfully!");
+            return content;
+        });
+    }
+
+    /**
+     * Downloads the most recently modified file in {@code directory} whose whole name matches {@code fileName};
+     * files modified in the same second are ordered by name.
+     */
+    public byte[] downloadLatest(String directory, Pattern fileName) throws ResourceDownloadException {
+        return withChannel("Failed to download the latest file from sftp server.", channel -> {
+            channel.cd(directory);
+            String latest = RemoteFile.latest(list(channel), fileName)
+                    .orElseThrow(() -> new SftpException(ChannelSftp.SSH_FX_NO_SUCH_FILE,
+                            "No file matching " + fileName.pattern() + " in " + directory));
+            return read(channel, latest);
+        });
+    }
+
+    private <T> T withChannel(String failureMessage, SftpOperation<T> operation) throws ResourceDownloadException {
         Session session = null;
         ChannelSftp channelSftp = null;
         try {
@@ -41,34 +66,19 @@ public class SftpFileDownloader {
             session = jsch.getSession(username, host, port);
             session.setPassword(password);
 
-            // Avoid asking for key confirmation
             java.util.Properties config = new java.util.Properties();
             config.put("StrictHostKeyChecking", "no");
             session.setConfig(config);
 
-            // Establish the SSH connection; the socket timeout also bounds silence during the transfer
             session.setTimeout(Math.toIntExact(readTimeout.toMillis()));
             session.connect(Math.toIntExact(connectTimeout.toMillis()));
 
-            // Create an SFTP channel
             channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect(Math.toIntExact(connectTimeout.toMillis()));
 
-            // Download the file into memory
-            try (InputStream inputStream = channelSftp.get(remoteFilePath);
-                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-
-                byte[] buffer = new byte[1024];
-                int bytesRead;
-                while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, bytesRead);
-                }
-                System.out.println("File downloaded successfully!");
-                return outputStream.toByteArray();
-            }
-
-        } catch (JSchException | SftpException | java.io.IOException e) {
-            throw new ResourceDownloadException("Failed to download resource from sftp server.", e);
+            return operation.run(channelSftp);
+        } catch (JSchException | SftpException | IOException e) {
+            throw new ResourceDownloadException(failureMessage, e);
         } finally {
             if (channelSftp != null) {
                 channelSftp.disconnect();
@@ -77,5 +87,25 @@ public class SftpFileDownloader {
                 session.disconnect();
             }
         }
+    }
+
+    private static byte[] read(ChannelSftp channel, String path) throws SftpException, IOException {
+        try (InputStream inputStream = channel.get(path)) {
+            return inputStream.readAllBytes();
+        }
+    }
+
+    private static List<RemoteFile> list(ChannelSftp channel) throws SftpException {
+        List<RemoteFile> files = new ArrayList<>();
+        for (Object entry : channel.ls(".")) {
+            ChannelSftp.LsEntry file = (ChannelSftp.LsEntry) entry;
+            files.add(new RemoteFile(file.getFilename(), Integer.toUnsignedLong(file.getAttrs().getMTime())));
+        }
+        return files;
+    }
+
+    @FunctionalInterface
+    private interface SftpOperation<T> {
+        T run(ChannelSftp channel) throws SftpException, IOException;
     }
 }
