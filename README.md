@@ -6,11 +6,22 @@ This module defines the contracts that all supplier implementations (AbGroup, Ac
 
 - **`SupplierProviderDescriptor`** — provider-api descriptor every supplier implements (extends `ProviderDescriptor<SupplierProvider>`). Declares `create(config)`, `feedFormat()`, `supplierInfo()`, and `configurationFields()`.
 - **`SupplierProvider`** — config-bound runtime produced by `SupplierProviderDescriptor.create(config)`. Declares `download()`.
-- **`InventoryItem`** — core inventory record (EAN, MFN, price, quantity, supplier), plus the
-  supplier's own product code (`sku`), filled by the feed parser and left unnormalized.
-- **`Taxonomy`** — product taxonomy record (brand, name, category) extracted from supplier feeds.
+- **`FeedItem`** — one feed row as the adapter reads it, through named getters. EAN, MFN, brand,
+  name, category (the supplier's own, which the application maps to its taxonomy), net price,
+  currency and quantity are required; lead time, the sellable /
+  in-stock / in-delivery flags, the supplier's own product code (`sku`) and weights have defaults.
+  A getter that throws makes the row invalid. This is all an adapter delivers per row; the
+  application assembles it into its own offer and product records, together with the supplier name
+  and accuracy score from `SupplierInfo`:
+  - a CSV adapter's **`CsvRowParser.parse(row)`** returns a `FeedItem` (or `null` to skip the row);
+  - an XML adapter's item class implements **`XmlItem`**, a `FeedItem` bound by JAXB.
+
+  Values go as the feed has them. The application unifies EAN and MFN and treats the common
+  placeholders as missing: `0`, `?` and `.` as MFN, and a blank brand, `No name`, `NoName`,
+  `No-Name`, `OEM`, `Inne`, `Inny`, `Brak`, `Sonstige`, `Diverse`, `Mix`, `Unknown`, `Other`, `N/A`,
+  `None` or `-` (any letter case) as brand. A placeholder only one supplier uses is dropped by its
+  adapter (the getter returns `null`).
 - **`FeedFormat`** — sealed interface discriminating CSV and XML feed formats.
-- **`CsvRowParser`** / **`XmlItem`** — parser contracts for feed data.
 - **`SupplierInfo`** — supplier metadata (name, type, origin, shipping policy).
 
 Support utilities (`api.support` package):
@@ -177,8 +188,8 @@ Common mechanics extracted from real adapters — the parts that repeat per supp
 excluding HTTP contract mapping (DTOs, endpoints, auth, error semantics), which stays explicit
 per adapter:
 
-- **Sku flow** — the feed parser writes the supplier's product code into `InventoryItem.sku`
-  (normalizing it per supplier as needed); the application looks the sku up from its own
+- **Sku flow** — the feed row returns the supplier's product code from `FeedItem.getSku()`
+  (normalized per supplier as needed), which the application keeps with the offer; the application looks the sku up from its own
   inventory when building `SupplierOrderLine`s; adapters read `line.sku()` directly when calling
   the supplier's ordering API. No feed re-download and no resolver layer are needed at order
   time. `FeedSource` (in `api.support`) is the injectable feed-bytes seam adapters use for
