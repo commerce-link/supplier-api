@@ -21,6 +21,7 @@ This module defines the contracts that all supplier implementations (AbGroup, Ac
   `No-Name`, `OEM`, `Inne`, `Inny`, `Brak`, `Sonstige`, `Diverse`, `Mix`, `Unknown`, `Other`, `N/A`,
   `None` or `-` (any letter case) as brand. A placeholder only one supplier uses is dropped by its
   adapter (the getter returns `null`).
+  What goes into EAN, MFN and `sku` is described in [Identifiers](#identifiers-ean-mfn-and-sku).
 - **`FeedFormat`** — sealed interface discriminating CSV and XML feed formats.
 - **`SupplierInfo`** — supplier metadata (name, type, origin, shipping policy).
 
@@ -30,6 +31,27 @@ Support utilities (`api.support` package):
 - **`FileZipper`** — ZIP/GZIP decompression.
 - **`ProductFeedPurifier`** — CSV data cleanup.
 - **`ProductCategoryMapper`** — base class for supplier-specific category mapping.
+
+## Identifiers: EAN, MFN and sku
+
+The application matches offers and products across suppliers by EAN or MFN, so these two codes must mean the same
+thing at every supplier.
+
+- **`getMfn()` is the manufacturer part number**: the code the manufacturer assigns (`910-002238`, `F74595X2`), the
+  same at every supplier that sells the product. It must never be the supplier's own code.
+- **The supplier's own product code goes to `getSku()`**: an index, catalogue number, symbol or internal id. The
+  application keeps it with the offer, and ordering adapters send it back to the supplier.
+- **A feed with no manufacturer part number reports the EAN as the MFN.** Decide this for the whole feed, never row by
+  row: if the format has no such field, always (`supplier-pminvestment`, `supplier-iks2`); if the field exists but is
+  optional, only when no row of the feed has it (`supplier-shoper`, `ShoperFeedRow.eanAsMfnWhenNoRowHasOne`).
+- **When most rows have an MFN and a few do not, those few return `null`.** The application leaves them out, which
+  shows the gap as a data-entry error at the supplier. Do not fill them from the EAN or the sku.
+- **A supplier that manufactures everything in its feed** may report its own product code as the MFN, because there
+  it is the manufacturer part number (`supplier-derform` for the Kidwell brand).
+- **Check real values before mapping a code field.** Short digit strings (`0080`, `7041`) or codes carrying the
+  supplier's own prefix (`TERO-1402`) are an index, not a manufacturer part number, whatever the field is called.
+  Reported as an MFN, such a code collides with real part numbers of other products: in the PIM it pulls another
+  product's brand, name and category, and for a row without an EAN it can bring in another product's EAN.
 
 ## Usage
 
